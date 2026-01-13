@@ -14,7 +14,7 @@ except ImportError:
     logger.warning("OpenBB Terminal not available. Using yfinance as fallback.")
 
 class OpenBBService:
-    """Service for interacting with OpenBB SDK"""
+    """Service for interacting with OpenBB SDK or yfinance"""
     
     @staticmethod
     def get_stock_data(symbol: str, start_date: str, end_date: Optional[str] = None) -> pd.DataFrame:
@@ -157,7 +157,7 @@ class OpenBBService:
     @staticmethod
     def get_technical_indicators(symbol: str, indicators: List[str], period: int = 20) -> pd.DataFrame:
         """
-        Get technical indicators using OpenBB
+        Get technical indicators using OpenBB or yfinance
         
         Args:
             symbol: Stock symbol
@@ -171,10 +171,31 @@ class OpenBBService:
             # Get historical data first
             end_date = datetime.now().strftime('%Y-%m-%d')
             start_date = (datetime.now() - timedelta(days=period * 2)).strftime('%Y-%m-%d')
-            data = openbb.stocks.load(symbol=symbol, start_date=start_date, end_date=end_date)
+            
+            # Try OpenBB first if available
+            data = None
+            if OPENBB_AVAILABLE:
+                try:
+                    data = openbb.stocks.load(symbol=symbol, start_date=start_date, end_date=end_date)
+                except Exception as e:
+                    logger.warning(f"OpenBB failed for {symbol}, using yfinance: {str(e)}")
+            
+            # Fallback to yfinance
+            if data is None or data.empty:
+                import yfinance as yf
+                ticker = yf.Ticker(symbol)
+                data = ticker.history(start=start_date, end=end_date)
+                # Rename columns
+                data = data.rename(columns={
+                    'Open': 'Open',
+                    'High': 'High',
+                    'Low': 'Low',
+                    'Close': 'Close',
+                    'Volume': 'Volume'
+                })
             
             if data is None or data.empty:
-                raise ValueError(f"No data found for {symbol}")
+                raise ValueError(f"No data found for symbol {symbol}")
             
             result = pd.DataFrame(index=data.index)
             
