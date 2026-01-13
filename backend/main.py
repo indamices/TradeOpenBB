@@ -312,30 +312,83 @@ async def get_ai_models(db: Session = Depends(get_db)):
 @app.post("/api/ai-models", response_model=AIModelConfigResponse, status_code=status.HTTP_201_CREATED)
 async def create_ai_model(model: AIModelConfigCreate, db: Session = Depends(get_db)):
     """Create new AI model configuration"""
-    from ai_service_factory import encrypt_api_key
-    
-    # Encrypt API key
-    encrypted_key = encrypt_api_key(model.api_key)
-    
-    db_model = AIModelConfig(
-        name=model.name,
-        provider=model.provider,
-        api_key=encrypted_key,
-        base_url=model.base_url,
-        model_name=model.model_name,
-        is_default=False,
-        is_active=True
-    )
-    
-    # If this is set as default, unset others
-    if model.is_default if hasattr(model, 'is_default') else False:
-        db.query(AIModelConfig).update({"is_default": False})
-        db_model.is_default = True
-    
-    db.add(db_model)
-    db.commit()
-    db.refresh(db_model)
-    return db_model
+    try:
+        from ai_service_factory import encrypt_api_key
+        
+        logger.info(f"Creating AI model: {model.name}, provider: {model.provider}")
+        
+        # Validate provider enum - handle both string and enum types
+        try:
+            if isinstance(model.provider, str):
+                # Convert string to enum
+                provider_enum = AIProvider(model.provider.lower())
+            elif isinstance(model.provider, AIProvider):
+                provider_enum = model.provider
+            else:
+                # Try to get value if it's an enum with value attribute
+                provider_value = getattr(model.provider, 'value', str(model.provider))
+                provider_enum = AIProvider(provider_value.lower())
+        except (ValueError, AttributeError) as e:
+            logger.error(f"Invalid provider: {model.provider}, type: {type(model.provider)}, error: {str(e)}")
+            valid_providers = [p.value for p in AIProvider]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid provider: {model.provider}. Must be one of: {valid_providers}"
+            )
+        
+        # Encrypt API key
+        try:
+            encrypted_key = encrypt_api_key(model.api_key)
+            logger.info("API key encrypted successfully")
+        except Exception as e:
+            logger.error(f"Failed to encrypt API key: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to encrypt API key: {str(e)}"
+            )
+        
+        # Create database model
+        db_model = AIModelConfig(
+            name=model.name,
+            provider=provider_enum,
+            api_key=encrypted_key,
+            base_url=model.base_url,
+            model_name=model.model_name,
+            is_default=False,
+            is_active=True
+        )
+        
+        # If this is set as default, unset others
+        if hasattr(model, 'is_default') and model.is_default:
+            db.query(AIModelConfig).update({"is_default": False})
+            db_model.is_default = True
+        
+        db.add(db_model)
+        db.commit()
+        db.refresh(db_model)
+        
+        logger.info(f"AI model created successfully with ID: {db_model.id}")
+        
+        # Return response with proper serialization
+        return {
+            "id": db_model.id,
+            "name": db_model.name,
+            "provider": db_model.provider.value if hasattr(db_model.provider, 'value') else str(db_model.provider),
+            "model_name": db_model.model_name,
+            "base_url": db_model.base_url,
+            "is_default": db_model.is_default,
+            "is_active": db_model.is_active,
+            "created_at": db_model.created_at
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating AI model: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create AI model: {str(e)}"
+        )
 
 @app.put("/api/ai-models/{model_id}", response_model=AIModelConfigResponse)
 async def update_ai_model(model_id: int, model: AIModelConfigUpdate, db: Session = Depends(get_db)):
