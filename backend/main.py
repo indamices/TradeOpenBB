@@ -79,23 +79,21 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # CORS middleware
 # Allow local development and cloud platform domains
+# Note: FastAPI CORSMiddleware doesn't support wildcards in allow_origins
+# Use allow_origin_regex for pattern matching instead
+import re
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",  # Vite default port
-        # Render platform
-        "https://*.render.com",
-        # Railway platform
-        "https://*.railway.app",
-        # Fly.io platform
-        "https://*.fly.dev",
-        # Vercel platform
-        "https://*.vercel.app",
+        "https://tradeopenbb-frontend.onrender.com",  # Render frontend
     ],
+    allow_origin_regex=r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Initialize database on startup
