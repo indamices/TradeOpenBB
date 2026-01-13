@@ -22,9 +22,10 @@ const Dashboard: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
+        const portfolioId = 1;  // Explicit portfolio ID
         const [portfolioData, positionsData] = await Promise.all([
-          tradingService.getPortfolio(),
-          tradingService.getPositions()
+          tradingService.getPortfolio(portfolioId),  // Explicitly pass ID
+          tradingService.getPositions(portfolioId)  // Explicitly pass ID
         ]);
         setPortfolio(portfolioData);
         setPositions(positionsData);

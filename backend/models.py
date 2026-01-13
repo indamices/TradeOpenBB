@@ -96,7 +96,7 @@ class AIModelConfig(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
-    provider = Column(SQLEnum(AIProvider), nullable=False)
+    provider = Column(SQLEnum(AIProvider, native_enum=False, length=50), nullable=False)
     api_key = Column(Text, nullable=False)  # Will be encrypted
     base_url = Column(String(500), nullable=True)  # For custom/local models
     model_name = Column(String(255), nullable=False)  # e.g., "gpt-4", "claude-3-opus"

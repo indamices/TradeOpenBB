@@ -4,7 +4,9 @@ import { Portfolio, Position, Order, Strategy, MarketQuote, StrategyGenerationRe
 export class TradingService {
   // Portfolio methods
   async getPortfolio(portfolioId: number = 1): Promise<Portfolio> {
-    return apiClient.get<Portfolio>(`/api/portfolio?portfolio_id=${portfolioId}`);
+    const params = new URLSearchParams();
+    params.append('portfolio_id', portfolioId.toString());
+    return apiClient.get<Portfolio>(`/api/portfolio?${params.toString()}`);
   }
 
   async createPortfolio(name: string, initialCash: number): Promise<Portfolio> {
@@ -20,7 +22,9 @@ export class TradingService {
 
   // Position methods
   async getPositions(portfolioId: number = 1): Promise<Position[]> {
-    return apiClient.get<Position[]>(`/api/positions?portfolio_id=${portfolioId}`);
+    const params = new URLSearchParams();
+    params.append('portfolio_id', portfolioId.toString());
+    return apiClient.get<Position[]>(`/api/positions?${params.toString()}`);
   }
 
   async createPosition(position: Omit<Position, 'id' | 'created_at'>): Promise<Position> {
@@ -29,7 +33,9 @@ export class TradingService {
 
   // Order methods
   async getOrders(portfolioId: number = 1): Promise<Order[]> {
-    return apiClient.get<Order[]>(`/api/orders?portfolio_id=${portfolioId}`);
+    const params = new URLSearchParams();
+    params.append('portfolio_id', portfolioId.toString());
+    return apiClient.get<Order[]>(`/api/orders?${params.toString()}`);
   }
 
   async placeOrder(order: Omit<Order, 'id' | 'status' | 'created_at' | 'commission' | 'avg_fill_price' | 'filled_at'>): Promise<Order> {

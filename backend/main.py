@@ -72,10 +72,28 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle all other exceptions"""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Internal server error"}
     )
+    # Ensure CORS headers are added even for errors
+    origin = request.headers.get("origin")
+    if origin:
+        # Check if origin is allowed
+        allowed_origins = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "https://tradeopenbb-frontend.onrender.com",
+        ]
+        import re
+        origin_pattern = re.compile(r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app")
+        
+        if origin in allowed_origins or origin_pattern.match(origin):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 # CORS middleware
 # Allow local development and cloud platform domains
