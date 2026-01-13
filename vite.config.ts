@@ -12,8 +12,7 @@ export default defineConfig(({ mode }) => {
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'import.meta.env.VITE_API_BASE_URL': JSON.stringify(env.VITE_API_BASE_URL || 'http://localhost:8000')
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
       },
       resolve: {
         alias: {
@@ -23,12 +22,7 @@ export default defineConfig(({ mode }) => {
       build: {
         outDir: 'dist',
         sourcemap: false,
-        minify: 'terser',
-        terserOptions: {
-          compress: {
-            drop_console: true,  // Remove console.log in production
-          },
-        },
+        minify: 'esbuild',  // Use esbuild instead of terser (faster, no extra dependency)
         rollupOptions: {
           output: {
             manualChunks: {
