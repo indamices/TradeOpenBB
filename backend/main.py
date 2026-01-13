@@ -125,6 +125,17 @@ async def startup_event():
         
         init_db()
         logger.info("Database initialized successfully")
+        
+        # Verify default portfolio exists
+        db = next(get_db())
+        try:
+            portfolio = db.query(Portfolio).filter(Portfolio.id == 1).first()
+            if portfolio:
+                logger.info(f"Verified default portfolio exists: {portfolio.name} (ID: {portfolio.id})")
+            else:
+                logger.warning("Default portfolio (ID=1) not found after initialization")
+        finally:
+            db.close()
     except Exception as e:
         logger.error(f"Database initialization failed: {str(e)}", exc_info=True)
         # Don't raise - allow app to start even if DB init fails
