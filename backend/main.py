@@ -281,8 +281,26 @@ async def run_backtest_endpoint(request: BacktestRequest, db: Session = Depends(
 @app.get("/api/ai-models", response_model=List[AIModelConfigResponse])
 async def get_ai_models(db: Session = Depends(get_db)):
     """Get all AI model configurations"""
-    models = db.query(AIModelConfig).filter(AIModelConfig.is_active == True).all()
-    return models
+    try:
+        models = db.query(AIModelConfig).filter(AIModelConfig.is_active == True).all()
+        # Ensure provider enum is properly serialized
+        result = []
+        for model in models:
+            model_dict = {
+                "id": model.id,
+                "name": model.name,
+                "provider": model.provider.value if hasattr(model.provider, 'value') else str(model.provider),
+                "model_name": model.model_name,
+                "base_url": model.base_url,
+                "is_default": model.is_default,
+                "is_active": model.is_active,
+                "created_at": model.created_at
+            }
+            result.append(model_dict)
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching AI models: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch AI models: {str(e)}")
 
 @app.post("/api/ai-models", response_model=AIModelConfigResponse, status_code=status.HTTP_201_CREATED)
 async def create_ai_model(model: AIModelConfigCreate, db: Session = Depends(get_db)):

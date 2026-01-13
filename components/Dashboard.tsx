@@ -125,8 +125,8 @@ const Dashboard: React.FC = () => {
       {/* Main Chart */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 className="text-lg font-semibold text-slate-200 mb-6">Equity Curve (Simulated)</h3>
-        <div className="h-80 w-full">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-80 w-full min-h-[320px]">
+          <ResponsiveContainer width="100%" height="100%" minHeight={320}>
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
