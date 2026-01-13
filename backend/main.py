@@ -118,10 +118,17 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     try:
+        # Ensure data directory exists for SQLite
+        import os
+        data_dir = os.path.join(os.getcwd(), "data")
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir, exist_ok=True)
+        
         init_db()
-        logger.info("Database initialized")
+        logger.info("Database initialized successfully")
     except Exception as e:
-        logger.error(f"Database initialization failed: {str(e)}")
+        logger.error(f"Database initialization failed: {str(e)}", exc_info=True)
+        # Don't raise - allow app to start even if DB init fails
 
 # Health check
 @app.get("/")

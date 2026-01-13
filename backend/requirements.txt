@@ -10,6 +10,7 @@ requests
 python-dotenv
 cryptography
 cachetools
+typing-extensions
 # Testing dependencies
 pytest
 pytest-asyncio
