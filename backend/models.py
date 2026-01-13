@@ -25,6 +25,45 @@ class AIProvider(enum.Enum):
     CLAUDE = "claude"
     CUSTOM = "custom"
 
+class AIProviderType(TypeDecorator):
+    """Custom type for AIProvider enum that handles string values correctly"""
+    impl = String(50)
+    cache_ok = True
+    
+    def __init__(self):
+        super().__init__(length=50)
+    
+    def process_bind_param(self, value, dialect):
+        """Convert enum to string when saving to database"""
+        if value is None:
+            return None
+        if isinstance(value, AIProvider):
+            return value.value
+        # If it's already a string, validate it
+        if isinstance(value, str):
+            try:
+                # Validate by trying to create enum
+                AIProvider(value.lower())
+                return value.lower()
+            except (ValueError, AttributeError):
+                return value.lower()  # Use as-is for backward compatibility
+        return str(value).lower()
+    
+    def process_result_value(self, value, dialect):
+        """Convert string to enum when reading from database"""
+        if value is None:
+            return None
+        if isinstance(value, AIProvider):
+            return value
+        # Try to convert string to enum
+        if isinstance(value, str):
+            try:
+                return AIProvider(value.lower())
+            except (ValueError, AttributeError):
+                # If conversion fails, return the string (will be handled in API layer)
+                return value
+        return value
+
 class Portfolio(Base):
     __tablename__ = "portfolios"
     
