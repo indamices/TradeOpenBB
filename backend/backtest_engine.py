@@ -2,11 +2,17 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional
-from .schemas import BacktestRequest, BacktestResult
-from .openbb_service import openbb_service
-from .models import Strategy
 from sqlalchemy.orm import Session
 import logging
+
+try:
+    from .schemas import BacktestRequest, BacktestResult
+    from .openbb_service import openbb_service
+    from .models import Strategy
+except ImportError:
+    from schemas import BacktestRequest, BacktestResult
+    from openbb_service import openbb_service
+    from models import Strategy
 
 logger = logging.getLogger(__name__)
 

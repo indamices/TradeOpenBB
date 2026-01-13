@@ -1,13 +1,20 @@
 from typing import Optional, Dict
 from sqlalchemy.orm import Session
-from .models import AIModelConfig, AIProvider
-from .ai_providers.gemini_provider import GeminiProvider
-from .ai_providers.openai_provider import OpenAIProvider
-from .ai_providers.claude_provider import ClaudeProvider
 from cryptography.fernet import Fernet
 import os
 import base64
 import logging
+
+try:
+    from .models import AIModelConfig, AIProvider
+    from .ai_providers.gemini_provider import GeminiProvider
+    from .ai_providers.openai_provider import OpenAIProvider
+    from .ai_providers.claude_provider import ClaudeProvider
+except ImportError:
+    from models import AIModelConfig, AIProvider
+    from ai_providers.gemini_provider import GeminiProvider
+    from ai_providers.openai_provider import OpenAIProvider
+    from ai_providers.claude_provider import ClaudeProvider
 
 logger = logging.getLogger(__name__)
 

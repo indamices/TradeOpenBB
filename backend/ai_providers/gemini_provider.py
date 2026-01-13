@@ -1,8 +1,12 @@
 from typing import Dict
-from .base_provider import BaseAIProvider
 import os
 import json
 import logging
+
+try:
+    from .base_provider import BaseAIProvider
+except ImportError:
+    from base_provider import BaseAIProvider
 
 logger = logging.getLogger(__name__)
 

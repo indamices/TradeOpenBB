@@ -1,5 +1,9 @@
 from typing import Dict
-from .base_provider import BaseAIProvider
+
+try:
+    from .base_provider import BaseAIProvider
+except ImportError:
+    from base_provider import BaseAIProvider
 import json
 import logging
 

@@ -1,8 +1,13 @@
 from datetime import datetime
 from typing import Optional
-from .schemas import MarketQuote
-from .openbb_service import openbb_service
 import logging
+
+try:
+    from .schemas import MarketQuote
+    from .openbb_service import openbb_service
+except ImportError:
+    from schemas import MarketQuote
+    from openbb_service import openbb_service
 
 logger = logging.getLogger(__name__)
 
