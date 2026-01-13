@@ -16,37 +16,21 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from typing import List, Optional
 import logging
 
-try:
-    from .database import get_db, init_db
-    from .models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, Base
-    from .schemas import (
-        Portfolio as PortfolioSchema, PortfolioCreate, PortfolioUpdate,
-        Position as PositionSchema, PositionCreate, PositionUpdate,
-        Order as OrderSchema, OrderCreate, OrderUpdate,
-        Strategy as StrategySchema, StrategyCreate, StrategyUpdate,
-        MarketQuote, StrategyGenerationRequest, StrategyGenerationResponse,
-        AIModelConfigCreate, AIModelConfigUpdate, AIModelConfigResponse,
-        BacktestRequest, BacktestResult
-    )
-    from .market_service import get_realtime_quote
-    from .ai_service_factory import generate_strategy
-    from .backtest_engine import run_backtest
-except ImportError:
-    # Fallback for direct execution
-    from database import get_db, init_db
-    from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, Base
-    from schemas import (
-        Portfolio as PortfolioSchema, PortfolioCreate, PortfolioUpdate,
-        Position as PositionSchema, PositionCreate, PositionUpdate,
-        Order as OrderSchema, OrderCreate, OrderUpdate,
-        Strategy as StrategySchema, StrategyCreate, StrategyUpdate,
-        MarketQuote, StrategyGenerationRequest, StrategyGenerationResponse,
-        AIModelConfigCreate, AIModelConfigUpdate, AIModelConfigResponse,
-        BacktestRequest, BacktestResult
-    )
-    from market_service import get_realtime_quote
-    from ai_service_factory import generate_strategy
-    from backtest_engine import run_backtest
+# Use absolute imports for Docker deployment
+from database import get_db, init_db
+from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, Base
+from schemas import (
+    Portfolio as PortfolioSchema, PortfolioCreate, PortfolioUpdate,
+    Position as PositionSchema, PositionCreate, PositionUpdate,
+    Order as OrderSchema, OrderCreate, OrderUpdate,
+    Strategy as StrategySchema, StrategyCreate, StrategyUpdate,
+    MarketQuote, StrategyGenerationRequest, StrategyGenerationResponse,
+    AIModelConfigCreate, AIModelConfigUpdate, AIModelConfigResponse,
+    BacktestRequest, BacktestResult
+)
+from market_service import get_realtime_quote
+from ai_service_factory import generate_strategy
+from backtest_engine import run_backtest
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

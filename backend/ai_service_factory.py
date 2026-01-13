@@ -23,14 +23,45 @@ def get_encryption_key() -> bytes:
     """Get encryption key from environment or generate one"""
     key = os.getenv("ENCRYPTION_KEY")
     if key:
-        return base64.urlsafe_b64decode(key)
-    else:
-        # Generate a key (in production, this should be set in environment)
-        logger.warning("Using default encryption key. Set ENCRYPTION_KEY in production!")
-        return Fernet.generate_key()
+        try:
+            # Try to decode if it's base64 encoded
+            decoded = base64.urlsafe_b64decode(key)
+            if len(decoded) == 32:
+                return decoded
+        except Exception:
+            pass
+        
+        # If decoding fails or key is not base64, try to use it directly
+        # If it's a string, encode it and pad/truncate to 32 bytes
+        if isinstance(key, str):
+            key_bytes = key.encode('utf-8')
+            # Pad or truncate to 32 bytes
+            if len(key_bytes) < 32:
+                key_bytes = key_bytes.ljust(32, b'0')
+            elif len(key_bytes) > 32:
+                key_bytes = key_bytes[:32]
+            return key_bytes
+        elif len(key) == 32:
+            return key
+    
+    # Generate a key if not provided
+    logger.warning("Using default encryption key. Set ENCRYPTION_KEY in production!")
+    return Fernet.generate_key()
 
-# Initialize Fernet cipher
-_cipher = Fernet(get_encryption_key())
+# Initialize Fernet cipher (lazy initialization to handle errors)
+_cipher = None
+
+def get_cipher():
+    """Get or create Fernet cipher instance"""
+    global _cipher
+    if _cipher is None:
+        try:
+            _cipher = Fernet(get_encryption_key())
+        except Exception as e:
+            logger.error(f"Failed to initialize cipher: {str(e)}")
+            # Generate a new key as fallback
+            _cipher = Fernet(Fernet.generate_key())
+    return _cipher
 
 def encrypt_api_key(api_key: str) -> str:
     """Encrypt API key for storage"""
