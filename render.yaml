@@ -1,0 +1,74 @@
+# Render Blueprint for TradeOpenBB
+# This file defines the services to deploy on Render
+# 
+# Usage:
+#   1. Push this repository to GitHub
+#   2. Go to https://render.com
+#   3. Click "New +" -> "Blueprint"
+#   4. Connect your GitHub repository
+#   5. Render will automatically detect this file and create services
+
+services:
+  # Backend API Service
+  - type: web
+    name: tradeopenbb-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free  # Free tier (or upgrade to starter: $7/month)
+    region: singapore  # Change to your preferred region
+    envVars:
+      # Database URL - Choose one:
+      # Option 1: Use SQLite (simple, no database service needed)
+      - key: DATABASE_URL
+        value: sqlite:///./data/smartquant.db
+      # Option 2: Use PostgreSQL (uncomment below and comment SQLite above)
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: tradeopenbb-db
+      #     property: connectionString
+      
+      # Encryption key for API keys (auto-generated, or set manually)
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      
+      # API keys (set manually in Render Dashboard)
+      - key: API_KEY
+        sync: false  # Set manually in Environment tab
+      
+      # Optional: Gemini API key (if using Gemini AI)
+      - key: GEMINI_API_KEY
+        sync: false  # Set manually if needed
+    
+    healthCheckPath: /
+    
+    # Build command (optional, Dockerfile handles this)
+    # buildCommand: docker build -t tradeopenbb-backend ./backend
+    
+    # Start command (defined in Dockerfile)
+    # startCommand: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  # Frontend Static Site
+  - type: web
+    name: tradeopenbb-frontend
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      # API base URL - automatically set from backend service
+      - key: VITE_API_BASE_URL
+        fromService:
+          name: tradeopenbb-backend
+          type: web
+          property: host
+    # Note: If auto-detection doesn't work, manually set:
+    # VITE_API_BASE_URL=https://tradeopenbb-backend.onrender.com
+
+# Optional: PostgreSQL Database (uncomment if using PostgreSQL)
+# Uncomment the database section below and update DATABASE_URL in backend service
+# databases:
+#   - name: tradeopenbb-db
+#     plan: free  # Free PostgreSQL database
+#     databaseName: smartquant_db
+#     user: quant_user
+#     # Password is auto-generated and injected via connectionString

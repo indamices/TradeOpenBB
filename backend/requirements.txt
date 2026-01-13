@@ -1,0 +1,26 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic==2.10.5
+pydantic-core==2.27.2
+pandas
+numpy
+yfinance
+requests
+python-dotenv
+cryptography
+cachetools
+# Testing dependencies
+pytest
+pytest-asyncio
+httpx
+pytest-benchmark
+pytest-cov
+# Optional: PostgreSQL support (uncomment if using PostgreSQL)
+# psycopg2-binary
+# Optional: OpenBB (can be installed later if needed)
+# openbb-terminal
+# Optional: AI providers (install as needed)
+# openai
+# anthropic
+# google-genai
