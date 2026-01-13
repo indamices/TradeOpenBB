@@ -66,7 +66,8 @@ def get_cipher():
 def encrypt_api_key(api_key: str) -> str:
     """Encrypt API key for storage"""
     try:
-        encrypted = _cipher.encrypt(api_key.encode())
+        cipher = get_cipher()
+        encrypted = cipher.encrypt(api_key.encode())
         return base64.urlsafe_b64encode(encrypted).decode()
     except Exception as e:
         logger.error(f"Encryption failed: {str(e)}")
@@ -75,8 +76,9 @@ def encrypt_api_key(api_key: str) -> str:
 def decrypt_api_key(encrypted_key: str) -> str:
     """Decrypt API key from storage"""
     try:
+        cipher = get_cipher()
         decoded = base64.urlsafe_b64decode(encrypted_key.encode())
-        decrypted = _cipher.decrypt(decoded)
+        decrypted = cipher.decrypt(decoded)
         return decrypted.decode()
     except Exception as e:
         logger.error(f"Decryption failed: {str(e)}")
