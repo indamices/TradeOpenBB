@@ -283,21 +283,45 @@ async def get_ai_models(db: Session = Depends(get_db)):
     """Get all AI model configurations"""
     try:
         models = db.query(AIModelConfig).filter(AIModelConfig.is_active == True).all()
-        # Convert to response models, ensuring Enum is properly serialized
         result = []
         for model in models:
-            # Convert provider enum to string value for serialization
-            if isinstance(model.provider, AIProvider):
-                provider_value = model.provider.value
-            elif hasattr(model.provider, 'value'):
-                provider_value = model.provider.value
-            else:
-                provider_value = str(model.provider)
+            # Handle provider enum conversion - SQLAlchemy may return string or enum
+            # This handles the case where database stores 'custom' but SQLAlchemy expects CUSTOM
+            provider_value = None
+            try:
+                if isinstance(model.provider, AIProvider):
+                    # Already an enum, get its value
+                    provider_value = model.provider.value
+                elif isinstance(model.provider, str):
+                    # It's a string from database, validate and use it
+                    # Try to convert to enum first to validate
+                    try:
+                        provider_enum = AIProvider(model.provider.lower())
+                        provider_value = provider_enum.value
+                    except (ValueError, AttributeError):
+                        # If conversion fails, use the string as-is (for backward compatibility)
+                        logger.warning(f"Invalid provider value '{model.provider}' for model {model.id}, using as-is")
+                        provider_value = model.provider.lower()
+                elif hasattr(model.provider, 'value'):
+                    # Has value attribute (enum-like object)
+                    provider_value = model.provider.value
+                else:
+                    # Fallback: convert to string and lowercase
+                    provider_str = str(model.provider)
+                    try:
+                        provider_enum = AIProvider(provider_str.lower())
+                        provider_value = provider_enum.value
+                    except (ValueError, AttributeError):
+                        provider_value = provider_str.lower()
+            except Exception as e:
+                logger.warning(f"Error processing provider for model {model.id}: {str(e)}")
+                # Fallback to string representation
+                provider_value = str(model.provider).lower() if model.provider else 'custom'
             
             result.append(AIModelConfigResponse(
                 id=model.id,
                 name=model.name,
-                provider=provider_value,  # Use string value
+                provider=provider_value,
                 model_name=model.model_name,
                 base_url=model.base_url,
                 is_default=model.is_default,
