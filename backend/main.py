@@ -18,7 +18,7 @@ import logging
 
 # Use absolute imports for Docker deployment
 from database import get_db, init_db
-from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, Base
+from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base
 from schemas import (
     Portfolio as PortfolioSchema, PortfolioCreate, PortfolioUpdate,
     Position as PositionSchema, PositionCreate, PositionUpdate,
@@ -283,20 +283,27 @@ async def get_ai_models(db: Session = Depends(get_db)):
     """Get all AI model configurations"""
     try:
         models = db.query(AIModelConfig).filter(AIModelConfig.is_active == True).all()
-        # Ensure provider enum is properly serialized
+        # Convert to response models, ensuring Enum is properly serialized
         result = []
         for model in models:
-            model_dict = {
-                "id": model.id,
-                "name": model.name,
-                "provider": model.provider.value if hasattr(model.provider, 'value') else str(model.provider),
-                "model_name": model.model_name,
-                "base_url": model.base_url,
-                "is_default": model.is_default,
-                "is_active": model.is_active,
-                "created_at": model.created_at
-            }
-            result.append(model_dict)
+            # Convert provider enum to string value for serialization
+            if isinstance(model.provider, AIProvider):
+                provider_value = model.provider.value
+            elif hasattr(model.provider, 'value'):
+                provider_value = model.provider.value
+            else:
+                provider_value = str(model.provider)
+            
+            result.append(AIModelConfigResponse(
+                id=model.id,
+                name=model.name,
+                provider=provider_value,  # Use string value
+                model_name=model.model_name,
+                base_url=model.base_url,
+                is_default=model.is_default,
+                is_active=model.is_active,
+                created_at=model.created_at
+            ))
         return result
     except Exception as e:
         logger.error(f"Error fetching AI models: {str(e)}", exc_info=True)
