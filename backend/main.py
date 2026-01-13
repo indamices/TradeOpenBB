@@ -79,8 +79,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # CORS middleware
 # Allow local development and cloud platform domains
-# Note: FastAPI CORSMiddleware doesn't support wildcards in allow_origins
-# Use allow_origin_regex for pattern matching instead
+# Use allow_origin_regex for pattern matching to support wildcard domains
 import re
 app.add_middleware(
     CORSMiddleware,
@@ -91,7 +90,7 @@ app.add_middleware(
     ],
     allow_origin_regex=r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_methods=["*"],  # Allow all methods including OPTIONS
     allow_headers=["*"],
     expose_headers=["*"],
 )
