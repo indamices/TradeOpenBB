@@ -51,14 +51,14 @@ def test_order_side_enum(client, default_portfolio):
     response = client.post("/api/orders", json=order_data)
     assert response.status_code == status.HTTP_201_CREATED
 
-def test_order_invalid_side_enum(client):
+def test_order_invalid_side_enum(client, default_portfolio):
     """Test order with invalid side enum"""
     order_data = {
         "symbol": "AAPL",
         "side": "INVALID",
         "type": "MARKET",
         "quantity": 10,
-        "price": 150.0
+        "portfolio_id": default_portfolio
     }
     response = client.post("/api/orders", json=order_data)
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
