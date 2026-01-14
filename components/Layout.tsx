@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, LineChart, Code2, Settings, Menu, X, Wallet } from 'lucide-react';
+import { LayoutDashboard, Settings, Menu, X, Wallet, TestTube, MessageSquare } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
