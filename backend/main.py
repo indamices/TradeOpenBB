@@ -219,6 +219,11 @@ async def get_positions(portfolio_id: int = 1, db: Session = Depends(get_db)):
 
 @app.post("/api/positions", response_model=PositionSchema, status_code=status.HTTP_201_CREATED)
 async def create_position(position: PositionCreate, db: Session = Depends(get_db)):
+    # Verify portfolio exists
+    portfolio = db.query(Portfolio).filter(Portfolio.id == position.portfolio_id).first()
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
     position_dict = position.dict()
     # Calculate market_value if not provided
     if 'market_value' not in position_dict:
@@ -403,7 +408,12 @@ async def get_indicators(symbol: str, indicators: str = "MACD,RSI,BB", period: i
         data = await get_technical_indicators(symbol.upper(), indicator_list, period)
         # Convert DataFrame to dict for JSON response
         if hasattr(data, 'to_dict'):
-            return data.to_dict(orient='records')
+            import numpy as np
+            import pandas as pd
+            # Replace NaN and Infinity with None for JSON compatibility
+            data_clean = data.replace([np.inf, -np.inf], np.nan)
+            data_clean = data_clean.where(pd.notnull(data_clean), None)
+            return data_clean.to_dict(orient='records')
         return data
     except Exception as e:
         logger.error(f"Failed to get indicators for {symbol}: {str(e)}")
@@ -603,10 +613,10 @@ async def delete_ai_model(model_id: int, db: Session = Depends(get_db)):
 @app.post("/api/ai-models/{model_id}/test")
 async def test_ai_model(model_id: int, db: Session = Depends(get_db)):
     """Test AI model connection"""
-    from ai_service_factory import test_model_connection
+    from ai_service_factory import test_ai_model_connection
     
     try:
-        result = await test_model_connection(model_id, db)
+        result = await test_ai_model_connection(model_id, db)
         return {"success": True, "message": "Model connection successful"}
     except Exception as e:
         return {"success": False, "message": str(e)}

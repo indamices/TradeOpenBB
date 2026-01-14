@@ -163,7 +163,7 @@ async def generate_strategy(prompt: str, model_id: Optional[int], db: Session) -
         logger.error(f"Strategy generation failed: {str(e)}")
         raise
 
-async def test_model_connection(model_id: int, db: Session) -> bool:
+async def test_ai_model_connection(model_id: int, db: Session) -> bool:
     """
     Test connection to AI model
     

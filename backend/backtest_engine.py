@@ -42,25 +42,31 @@ class BacktestEngine:
         current_qty = self.positions.get(symbol, 0)
         
         if signal == 1:  # Buy
-            # Calculate how many shares we can buy
-            shares_to_buy = int(self.cash / price)
-            if shares_to_buy > 0:
-                cost = shares_to_buy * price
-                commission = max(1, cost * 0.0003)  # 3 bps, min $1
-                total_cost = cost + commission
-                
-                if total_cost <= self.cash:
-                    self.cash -= total_cost
-                    self.positions[symbol] = current_qty + shares_to_buy
+            # Calculate how many shares we can buy (accounting for commission)
+            # We need: shares * price + commission <= cash
+            # commission = max(1, shares * price * 0.0003)
+            # Try to find the maximum shares we can buy
+            max_shares = int(self.cash / price)
+            if max_shares > 0:
+                # Try buying max_shares and check if we have enough cash
+                for shares_to_buy in range(max_shares, 0, -1):
+                    cost = shares_to_buy * price
+                    commission = max(1, cost * 0.0003)  # 3 bps, min $1
+                    total_cost = cost + commission
                     
-                    self.trades.append({
-                        'date': date,
-                        'symbol': symbol,
-                        'side': 'BUY',
-                        'quantity': shares_to_buy,
-                        'price': price,
-                        'commission': commission
-                    })
+                    if total_cost <= self.cash:
+                        self.cash -= total_cost
+                        self.positions[symbol] = current_qty + shares_to_buy
+                        
+                        self.trades.append({
+                            'date': date,
+                            'symbol': symbol,
+                            'side': 'BUY',
+                            'quantity': shares_to_buy,
+                            'price': price,
+                            'commission': commission
+                        })
+                        break
         
         elif signal == -1:  # Sell
             if current_qty > 0:

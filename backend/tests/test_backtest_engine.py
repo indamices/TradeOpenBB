@@ -39,7 +39,7 @@ class TestBacktestEngine:
         engine = BacktestEngine(initial_cash=10000)
         date = datetime.now()
         
-        # Buy 10 shares at $100 each
+        # Buy shares at $100 each (with 10000 cash, should buy ~99 shares after commission)
         engine.execute_trade("AAPL", 1, 100.0, date)
         
         assert "AAPL" in engine.positions
@@ -198,7 +198,7 @@ class TestBacktestEngine:
             name="Test Strategy",
             description="Test",
             logic_code="signal = 1",
-            portfolio_id=1
+            target_portfolio_id=1
         )
         db_session.add(strategy)
         db_session.commit()
