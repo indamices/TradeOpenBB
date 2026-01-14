@@ -162,21 +162,73 @@ class TestBacktestEngine:
         assert isinstance(metrics['max_drawdown'], float)
     
     def test_calculate_metrics_with_trades(self):
-        """Test calculating metrics with trades"""
+        """Test calculating metrics with trades (use actual engine state)"""
         engine = BacktestEngine(initial_cash=10000)
-        date = datetime.now()
+        # Use fixed dates to avoid time-related uncertainty
+        date1 = datetime(2024, 1, 1)
+        date2 = datetime(2024, 1, 2)
         
-        # Execute some trades
-        engine.execute_trade("AAPL", 1, 100.0, date)
-        engine.execute_trade("AAPL", -1, 110.0, date + timedelta(days=1))
+        # Initial portfolio value (before any trades)
+        initial_value = engine.calculate_portfolio_value({"AAPL": 100.0})
         
-        equity_curve = [10000, 10100, 10100]
+        # Execute a buy trade
+        engine.execute_trade("AAPL", 1, 100.0, date1)
+        # After buy, compute portfolio value at buy price
+        pv_after_buy = engine.calculate_portfolio_value({"AAPL": 100.0})
+        
+        # Execute a sell trade
+        engine.execute_trade("AAPL", -1, 110.0, date2)
+        # After sell, compute portfolio value at sell price
+        pv_after_sell = engine.calculate_portfolio_value({"AAPL": 110.0})
+        
+        # Build equity curve from actual engine values
+        equity_curve = [initial_value, pv_after_buy, pv_after_sell]
+        
         metrics = engine.calculate_metrics(equity_curve)
         
-        # total_trades comes from len(self.trades)
-        assert metrics['total_trades'] == len(engine.trades)
-        assert len(engine.trades) >= 1  # At least one trade should execute
-        assert isinstance(metrics['win_rate'], float)
+        # Expect exactly two trades executed (BUY then SELL)
+        assert len(engine.trades) == 2
+        assert metrics['total_trades'] == len(engine.trades) == 2
+        
+        # Check trade content: first BUY then SELL
+        assert engine.trades[0]['side'] == 'BUY'
+        assert engine.trades[1]['side'] == 'SELL'
+        assert engine.trades[0]['symbol'] == 'AAPL'
+        assert engine.trades[1]['symbol'] == 'AAPL'
+        assert engine.trades[0]['price'] == pytest.approx(100.0, rel=1e-6)
+        assert engine.trades[1]['price'] == pytest.approx(110.0, rel=1e-6)
+        assert engine.trades[0]['quantity'] > 0
+        assert engine.trades[1]['quantity'] > 0
+        assert 'commission' in engine.trades[0]
+        assert 'commission' in engine.trades[1]
+        
+        # Verify dates
+        assert engine.trades[0]['date'] == date1
+        assert engine.trades[1]['date'] == date2
+        
+        # Compute expected P&L: (sell_price - buy_price) * quantity
+        buy_qty = engine.trades[0]['quantity']
+        buy_price = engine.trades[0]['price']
+        sell_price = engine.trades[1]['price']
+        expected_pnl = (sell_price - buy_price) * buy_qty
+        
+        # Since sell_price > buy_price, this should be a winning trade
+        # win_rate should be 100% since there is one round-trip trade and pnl > 0
+        assert expected_pnl > 0, "Expected profitable trade"
+        assert metrics['win_rate'] == pytest.approx(100.0, rel=1e-3)
+        
+        # Ensure metrics numeric values are floats and make basic sanity checks
+        assert isinstance(metrics['total_return'], float)
+        assert isinstance(metrics['sharpe_ratio'], float)
+        assert isinstance(metrics['max_drawdown'], float)
+        assert isinstance(metrics['annualized_return'], float)
+        
+        # Verify total_return is positive (since we sold at higher price)
+        assert metrics['total_return'] > 0
+        
+        # Verify equity curve values are consistent
+        assert equity_curve[0] == pytest.approx(initial_value, rel=1e-6)
+        assert equity_curve[2] > equity_curve[0], "Final value should be greater than initial"
     
     @pytest.mark.asyncio
     async def test_run_backtest_missing_strategy(self, db_session):
