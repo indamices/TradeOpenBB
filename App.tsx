@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
+import BacktestLab from './components/BacktestLab';
+import AIChatAssistant from './components/AIChatAssistant';
 import StrategyLab from './components/StrategyLab';
 import AIModelSettings from './components/AIModelSettings';
 import { Wallet } from 'lucide-react';
@@ -13,11 +15,11 @@ const App: React.FC = () => {
       case 'dashboard':
         return <Dashboard />;
       case 'backtest':
-        // TODO: Replace with BacktestLab component
-        return <div className="text-slate-400">回测实验室（开发中）</div>;
+        return <BacktestLab />;
       case 'ai-chat':
-        // TODO: Replace with AIChatAssistant component
-        return <div className="text-slate-400">AI策略助手（开发中）</div>;
+        return <AIChatAssistant />;
+      case 'strategy':
+        return <StrategyLab />;
       case 'portfolio':
         return (
             <div className="flex flex-col items-center justify-center h-[50vh] text-slate-500">

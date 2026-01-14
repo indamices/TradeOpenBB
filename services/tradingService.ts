@@ -63,6 +63,23 @@ export class TradingService {
     return apiClient.get<MarketQuote>(`/api/market/quote/${symbol}`);
   }
 
+  async getMultipleQuotes(symbols: string[]): Promise<MarketQuote[]> {
+    const params = new URLSearchParams();
+    symbols.forEach(symbol => params.append('symbols', symbol));
+    return apiClient.get<MarketQuote[]>(`/api/market/quotes?${params.toString()}`);
+  }
+
+  async getTechnicalIndicators(symbol: string, indicators: string[], period: number = 20): Promise<any[]> {
+    const params = new URLSearchParams();
+    indicators.forEach(ind => params.append('indicators', ind));
+    params.append('period', period.toString());
+    return apiClient.get<any[]>(`/api/market/indicators/${symbol}?${params.toString()}`);
+  }
+
+  async getMarketOverview(): Promise<any> {
+    return apiClient.get<any>('/api/market/overview');
+  }
+
   // Backtest methods
   async runBacktest(request: BacktestRequest): Promise<BacktestResult> {
     return apiClient.post<BacktestResult>('/api/backtest', request);

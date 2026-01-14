@@ -124,7 +124,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
-  code_snippets?: Array<{language: string, code: string}>;
+  code_snippets?: { [key: string]: string };
 }
 
 export interface ChatRequest {
