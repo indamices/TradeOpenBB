@@ -88,8 +88,9 @@ async def get_multiple_quotes(symbols: List[str]) -> List[MarketQuote]:
     
     quotes = []
     # Process in smaller batches to avoid overwhelming the API
-    batch_size = 5
-    delay_between_batches = 0.5  # seconds
+    # Reduced batch size and increased delay to avoid rate limiting
+    batch_size = 3  # Reduced from 5 to 3
+    delay_between_batches = 1.0  # Increased from 0.5 to 1.0 seconds
     
     for i in range(0, len(symbols), batch_size):
         batch = symbols[i:i + batch_size]
@@ -124,6 +125,16 @@ async def get_market_overview() -> Dict:
     # For now, return a simple overview
     # In production, this would aggregate data from multiple sources
     try:
+        # Get quotes for major indices/stocks (with caching to reduce API calls)
+        from cachetools import TTLCache
+        
+        if not hasattr(get_market_overview, '_cache'):
+            get_market_overview._cache = TTLCache(maxsize=1, ttl=30)
+        
+        cache_key = "market_overview_quotes"
+        if cache_key in get_market_overview._cache:
+            return get_market_overview._cache[cache_key]
+        
         # Get quotes for major indices/stocks
         major_symbols = ['SPY', 'QQQ', 'DIA', 'AAPL', 'MSFT', 'GOOGL']
         quotes = await get_multiple_quotes(major_symbols)
@@ -133,13 +144,17 @@ async def get_market_overview() -> Dict:
         down_count = len(quotes) - up_count
         total_volume = sum(q.volume for q in quotes)
         
-        return {
+        result = {
             'total_symbols': len(quotes),
             'up_count': up_count,
             'down_count': down_count,
             'total_volume': total_volume,
             'timestamp': datetime.now().isoformat()
         }
+        
+        # Cache the result
+        get_market_overview._cache[cache_key] = result
+        return result
     except Exception as e:
         logger.error(f"Failed to get market overview: {str(e)}")
         raise

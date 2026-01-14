@@ -7,9 +7,13 @@ from cachetools import TTLCache
 
 logger = logging.getLogger(__name__)
 
-# Cache for market data (5 second TTL to reduce API calls)
-quote_cache = TTLCache(maxsize=500, ttl=5)
-data_cache = TTLCache(maxsize=200, ttl=30)  # Historical data cached longer
+# Cache for market data (10 second TTL to reduce API calls and rate limiting)
+quote_cache = TTLCache(maxsize=500, ttl=10)
+data_cache = TTLCache(maxsize=200, ttl=60)  # Historical data cached longer
+
+# Rate limiting: track last request time per symbol
+_last_request_time = {}
+_min_request_interval = 0.5  # Minimum 0.5 seconds between requests for same symbol
 
 # Try to import OpenBB, but make it optional
 try:
@@ -165,6 +169,15 @@ class OpenBBService:
             cache_key = f"quote:{symbol}"
             if cache_key in quote_cache:
                 return quote_cache[cache_key]
+            
+            # Rate limiting: ensure minimum interval between requests for same symbol
+            current_time = time.time()
+            if symbol in _last_request_time:
+                time_since_last = current_time - _last_request_time[symbol]
+                if time_since_last < _min_request_interval:
+                    wait_time = _min_request_interval - time_since_last
+                    time.sleep(wait_time)
+            _last_request_time[symbol] = time.time()
             
             # Use yfinance as primary/fallback with retry logic
             import yfinance as yf

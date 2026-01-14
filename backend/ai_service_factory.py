@@ -56,7 +56,22 @@ def get_cipher():
     global _cipher
     if _cipher is None:
         try:
-            _cipher = Fernet(get_encryption_key())
+            key = get_encryption_key()
+            # Ensure key is 32 bytes (Fernet requirement)
+            if len(key) != 32:
+                # If key is base64 encoded (44 chars), decode it
+                if len(key) == 44:
+                    try:
+                        key = base64.urlsafe_b64decode(key)
+                    except Exception:
+                        pass
+                # If still not 32 bytes, pad or truncate
+                if len(key) != 32:
+                    if len(key) < 32:
+                        key = key.ljust(32, b'0')
+                    else:
+                        key = key[:32]
+            _cipher = Fernet(key)
         except Exception as e:
             logger.error(f"Failed to initialize cipher: {str(e)}")
             # Generate a new key as fallback
