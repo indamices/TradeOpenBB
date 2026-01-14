@@ -26,14 +26,17 @@ from schemas import (
     Strategy as StrategySchema, StrategyCreate, StrategyUpdate,
     MarketQuote, StrategyGenerationRequest, StrategyGenerationResponse,
     AIModelConfigCreate, AIModelConfigUpdate, AIModelConfigResponse,
-    BacktestRequest, BacktestResult
+    BacktestRequest, BacktestResult, ChatRequest, ChatResponse
 )
-from market_service import get_realtime_quote
+from market_service import get_realtime_quote, get_multiple_quotes, get_market_overview, get_technical_indicators
 from ai_service_factory import generate_strategy
 from backtest_engine import run_backtest
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Simple in-memory conversation storage (in production, use database)
+conversation_storage: Dict[str, List[Dict]] = {}
 
 app = FastAPI(title="SmartQuant API", version="1.0.0")
 
@@ -62,10 +65,38 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
     """Handle SQLAlchemy errors"""
-    logger.error(f"Database error: {str(exc)}")
+    error_str = str(exc)
+    logger.error(f"Database error: {error_str}", exc_info=True)
+    
+    # Provide more user-friendly error messages for common database errors
+    if "could not translate host name" in error_str.lower() or "name or service not known" in error_str.lower():
+        detail = (
+            "Database connection error: Unable to resolve database hostname. "
+            "Please check your DATABASE_URL configuration in Render Dashboard. "
+            "Use the External Connection String (with full domain name) instead of Internal. "
+            "See RENDER_POSTGRESQL_SETUP.md for detailed instructions."
+        )
+    elif "connection refused" in error_str.lower() or "connection timeout" in error_str.lower():
+        detail = (
+            "Database connection error: Unable to connect to database server. "
+            "Please check if the database service is running and accessible."
+        )
+    elif "authentication failed" in error_str.lower() or "password authentication failed" in error_str.lower():
+        detail = (
+            "Database authentication error: Invalid username or password. "
+            "Please check your DATABASE_URL configuration in Render Dashboard."
+        )
+    elif "database" in error_str.lower() and "does not exist" in error_str.lower():
+        detail = (
+            "Database error: The specified database does not exist. "
+            "Please check your DATABASE_URL configuration."
+        )
+    else:
+        detail = f"Database error occurred: {error_str}"
+    
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Database error occurred"}
+        content={"detail": detail}
     )
 
 @app.exception_handler(Exception)
@@ -255,6 +286,85 @@ async def generate_strategy_endpoint(request: StrategyGenerationRequest, db: Ses
         logger.error(f"Strategy generation failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Strategy generation failed: {str(e)}")
 
+# AI Chat endpoints
+@app.post("/api/ai/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
+    """AI chat conversation"""
+    try:
+        import uuid
+        from datetime import datetime
+        
+        # Get or create conversation ID
+        conversation_id = request.conversation_id or str(uuid.uuid4())
+        
+        # Initialize conversation if new
+        if conversation_id not in conversation_storage:
+            conversation_storage[conversation_id] = []
+        
+        # Add user message to history
+        conversation_storage[conversation_id].append({
+            'role': 'user',
+            'content': request.message,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        # Generate response using strategy generation (simplified - can be enhanced)
+        # For now, treat chat as strategy generation with context
+        try:
+            result = await generate_strategy(request.message, None, db)
+            ai_response = result.explanation
+            code_snippets = {'python': result.code} if result.code else None
+        except Exception:
+            # Fallback response
+            ai_response = "I understand your question. Let me help you with strategy development."
+            code_snippets = None
+        
+        # Add assistant response to history
+        conversation_storage[conversation_id].append({
+            'role': 'assistant',
+            'content': ai_response,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        return ChatResponse(
+            message=ai_response,
+            conversation_id=conversation_id,
+            suggestions=None,
+            code_snippets=code_snippets
+        )
+    except Exception as e:
+        logger.error(f"Chat failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+@app.get("/api/ai/chat/{conversation_id}")
+async def get_conversation_history(conversation_id: str):
+    """Get conversation history"""
+    try:
+        if conversation_id not in conversation_storage:
+            return {"conversation_id": conversation_id, "messages": []}
+        return {
+            "conversation_id": conversation_id,
+            "messages": conversation_storage[conversation_id]
+        }
+    except Exception as e:
+        logger.error(f"Failed to get conversation history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get conversation history: {str(e)}")
+
+@app.post("/api/ai/suggestions")
+async def get_suggestions(context: Optional[Dict] = None, db: Session = Depends(get_db)):
+    """Get AI proactive strategy suggestions"""
+    try:
+        # Simplified suggestions - can be enhanced with more sophisticated logic
+        suggestions = [
+            "Consider a mean reversion strategy using Bollinger Bands",
+            "Try a momentum strategy based on RSI indicators",
+            "Explore a pairs trading strategy for correlated stocks"
+        ]
+        return {"suggestions": suggestions}
+    except Exception as e:
+        logger.error(f"Failed to get suggestions: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get suggestions: {str(e)}")
+
 # Market endpoints
 @app.get("/api/market/quote/{symbol}", response_model=MarketQuote)
 async def get_quote(symbol: str):
@@ -265,6 +375,49 @@ async def get_quote(symbol: str):
     except Exception as e:
         logger.error(f"Failed to get quote for {symbol}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get quote: {str(e)}")
+
+@app.get("/api/market/quotes", response_model=List[MarketQuote])
+async def get_quotes(symbols: str):
+    """
+    Get real-time quotes for multiple symbols
+    Query parameter: symbols (comma-separated, e.g., "AAPL,MSFT,GOOGL")
+    """
+    try:
+        symbol_list = [s.strip().upper() for s in symbols.split(',')]
+        quotes = await get_multiple_quotes(symbol_list)
+        return quotes
+    except Exception as e:
+        logger.error(f"Failed to get quotes: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get quotes: {str(e)}")
+
+@app.get("/api/market/indicators/{symbol}")
+async def get_indicators(symbol: str, indicators: str = "MACD,RSI,BB", period: int = 20):
+    """
+    Get technical indicators for a symbol
+    Query parameters:
+    - indicators: comma-separated indicator names (default: "MACD,RSI,BB")
+    - period: period for calculations (default: 20)
+    """
+    try:
+        indicator_list = [i.strip() for i in indicators.split(',')]
+        data = await get_technical_indicators(symbol.upper(), indicator_list, period)
+        # Convert DataFrame to dict for JSON response
+        if hasattr(data, 'to_dict'):
+            return data.to_dict(orient='records')
+        return data
+    except Exception as e:
+        logger.error(f"Failed to get indicators for {symbol}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get indicators: {str(e)}")
+
+@app.get("/api/market/overview")
+async def get_overview():
+    """Get market overview data"""
+    try:
+        overview = await get_market_overview()
+        return overview
+    except Exception as e:
+        logger.error(f"Failed to get market overview: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get market overview: {str(e)}")
 
 # Backtest endpoints
 @app.post("/api/backtest", response_model=BacktestResult)

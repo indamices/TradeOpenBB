@@ -23,10 +23,18 @@ services:
       # - key: DATABASE_URL
       #   value: sqlite:///./data/smartquant.db
       # Option 2: Use PostgreSQL (persistent storage - recommended)
+      # Note: If you encounter "could not translate host name" error, manually set DATABASE_URL
+      # in Render Dashboard using the External Connection String (with full domain name)
+      # See RENDER_POSTGRESQL_SETUP.md for detailed instructions
       - key: DATABASE_URL
         fromDatabase:
           name: tradeopenbb-db
           property: connectionString
+        # If fromDatabase doesn't work, manually set in Render Dashboard:
+        # 1. Go to tradeopenbb-backend -> Environment
+        # 2. Add/Edit DATABASE_URL
+        # 3. Use External Connection String from tradeopenbb-db -> Connections
+        # 4. Format: postgresql://user:password@dpg-xxxxx-a.oregon-postgres.render.com/dbname
       
       # Encryption key for API keys (auto-generated, or set manually)
       - key: ENCRYPTION_KEY
