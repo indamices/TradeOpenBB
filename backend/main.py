@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from typing import List, Optional
+from typing import List, Optional, Dict
 import logging
 
 # Use absolute imports for Docker deployment
