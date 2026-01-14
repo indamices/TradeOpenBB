@@ -55,14 +55,12 @@ services:
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     envVars:
-      # API base URL - set to backend service URL
+      # API base URL - must be set to full backend service URL
+      # Note: fromService doesn't work reliably for static sites during build
+      # You may need to manually set this in Render Dashboard:
+      # Go to tradeopenbb-frontend -> Environment -> Add: VITE_API_BASE_URL=https://tradeopenbb-backend.onrender.com
       - key: VITE_API_BASE_URL
-        fromService:
-          name: tradeopenbb-backend
-          type: web
-          property: host
-        # If auto-detection doesn't work, manually set in Render Dashboard:
-        # VITE_API_BASE_URL=https://tradeopenbb-backend.onrender.com
+        value: https://tradeopenbb-backend.onrender.com
 
 # Optional: PostgreSQL Database (uncomment if using PostgreSQL)
 # Uncomment the database section below and update DATABASE_URL in backend service

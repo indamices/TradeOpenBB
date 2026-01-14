@@ -22,6 +22,6 @@ pytest-cov
 # Optional: OpenBB (can be installed later if needed)
 # openbb-terminal
 # Optional: AI providers (install as needed)
-# openai
-# anthropic
-# google-genai
+openai  # Required for OpenAI models
+# anthropic  # Uncomment if using Claude
+# google-genai  # Uncomment if using Gemini
