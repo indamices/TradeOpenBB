@@ -5,9 +5,11 @@ Supports both SQLite (default) and PostgreSQL
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import os
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 # Support both PostgreSQL and SQLite
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -20,7 +22,28 @@ elif DATABASE_URL.startswith("sqlite"):
     pass
 else:
     # PostgreSQL URL
-    pass
+    # Fix for Render: If using internal connection string (dpg-xxxxx-a), convert to external
+    # Internal format: postgresql://user:pass@dpg-xxxxx-a/dbname
+    # External format: postgresql://user:pass@dpg-xxxxx-a.oregon-postgres.render.com/dbname
+    import re
+    # Check if it's a Render internal connection string (contains dpg-xxxxx-a without domain)
+    pattern = r'postgresql://([^@]+)@(dpg-[a-z0-9]+-a)(?:/|$)'
+    match = re.search(pattern, DATABASE_URL)
+    if match and '.render.com' not in DATABASE_URL and '.oregon-postgres' not in DATABASE_URL:
+        # It's an internal connection string, try to convert to external
+        # Extract credentials and database name
+        credentials = match.group(1)
+        hostname = match.group(2)
+        # Try to extract database name
+        db_match = re.search(r'@dpg-[a-z0-9]+-a(?:/|$)(.*?)(?:$|\?)', DATABASE_URL)
+        db_name = db_match.group(1) if db_match else 'smartquant_db'
+        # Construct external connection string
+        external_url = f"postgresql://{credentials}@{hostname}.oregon-postgres.render.com/{db_name}"
+        logger.warning(f"Detected Render internal connection string, attempting to use external format")
+        logger.warning(f"Original: {DATABASE_URL[:50]}...")
+        logger.warning(f"Using: {external_url[:50]}...")
+        logger.warning("If connection still fails, manually set DATABASE_URL in Render Dashboard using External Connection String")
+        DATABASE_URL = external_url
 
 # Create engine with appropriate settings
 if DATABASE_URL.startswith("sqlite"):
