@@ -29,7 +29,7 @@ from schemas import (
     BacktestRequest, BacktestResult, ChatRequest, ChatResponse
 )
 from market_service import get_realtime_quote, get_multiple_quotes, get_market_overview, get_technical_indicators
-from ai_service_factory import generate_strategy
+from ai_service_factory import generate_strategy, chat_with_ai
 from backtest_engine import run_backtest
 
 logging.basicConfig(level=logging.INFO)
@@ -313,15 +313,22 @@ async def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
             'timestamp': datetime.now().isoformat()
         })
         
-        # Generate response using strategy generation (simplified - can be enhanced)
-        # For now, treat chat as strategy generation with context
+        # Use dedicated chat function instead of strategy generation
+        # This allows for natural conversation without requiring JSON format
+        conversation_history = conversation_storage.get(conversation_id, [])
+        
         try:
-            result = await generate_strategy(request.message, None, db)
-            ai_response = result.explanation
-            code_snippets = {'python': result.code} if result.code else None
-        except Exception:
+            ai_response = await chat_with_ai(
+                request.message, 
+                None,  # Use default model
+                db,
+                conversation_history=conversation_history
+            )
+            code_snippets = None  # Can be extracted from response if needed
+        except Exception as e:
+            logger.error(f"Chat failed: {str(e)}", exc_info=True)
             # Fallback response
-            ai_response = "I understand your question. Let me help you with strategy development."
+            ai_response = "I apologize, but I encountered an error. Please try again or check your AI model configuration."
             code_snippets = None
         
         # Add assistant response to history

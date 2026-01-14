@@ -163,6 +163,42 @@ async def generate_strategy(prompt: str, model_id: Optional[int], db: Session) -
         logger.error(f"Strategy generation failed: {str(e)}")
         raise
 
+async def chat_with_ai(message: str, model_id: Optional[int], db: Session, conversation_history: list = None) -> str:
+    """
+    Chat with AI (for general conversation)
+    
+    Args:
+        message: User's message
+        model_id: Optional model ID (if None, use default)
+        db: Database session
+        conversation_history: List of previous messages
+    
+    Returns:
+        AI's response as plain text
+    """
+    try:
+        # Get model configuration
+        if model_id:
+            model_config = get_model_by_id(model_id, db)
+        else:
+            model_config = get_default_model(db)
+        
+        if not model_config:
+            return "I'm sorry, but no AI model is configured. Please set up an AI model in settings to use the chat feature."
+        
+        if not model_config.is_active:
+            return f"I'm sorry, but the AI model '{model_config.name}' is not active. Please activate it in settings."
+        
+        # Create provider and chat
+        provider = create_provider(model_config)
+        response = await provider.chat(message, conversation_history)
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Chat failed: {str(e)}", exc_info=True)
+        return f"I apologize, but I encountered an error: {str(e)}. Please try again or check your AI model configuration."
+
 async def test_ai_model_connection(model_id: int, db: Session) -> bool:
     """
     Test connection to AI model

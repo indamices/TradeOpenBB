@@ -147,6 +147,48 @@ def strategy_logic(df: pd.DataFrame) -> pd.Series:
                 "explanation": f"Error connecting to AI model. Returned default SMA Crossover strategy. Error: {str(e)}"
             }
     
+    async def chat(self, message: str, conversation_history: list = None) -> str:
+        """Chat with OpenAI (for general conversation)"""
+        try:
+            system_instruction = self.get_chat_system_instruction()
+            
+            # Build messages from history if provided
+            messages = [{"role": "system", "content": system_instruction}]
+            
+            if conversation_history:
+                # Add conversation history
+                for msg in conversation_history[-10:]:  # Limit to last 10 messages
+                    if isinstance(msg, dict) and "role" in msg and "content" in msg:
+                        messages.append({
+                            "role": msg["role"],
+                            "content": msg["content"]
+                        })
+            
+            # Add current message
+            messages.append({"role": "user", "content": message})
+            
+            # Make API call without JSON format requirement
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages,
+                    temperature=0.7
+                )
+            except Exception as e:
+                logger.warning(f"OpenAI chat API call failed: {str(e)}")
+                raise
+            
+            result_text = response.choices[0].message.content
+            if not result_text:
+                raise ValueError("No content generated")
+            
+            return result_text.strip()
+            
+        except Exception as e:
+            logger.error(f"OpenAI chat failed: {str(e)}", exc_info=True)
+            # Return a helpful error message instead of raising
+            return f"I apologize, but I encountered an error: {str(e)}. Please try again or check your API configuration."
+    
     async def test_connection(self) -> bool:
         """Test OpenAI or OpenAI-compatible API connection"""
         try:

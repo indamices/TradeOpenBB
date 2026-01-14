@@ -97,6 +97,46 @@ def strategy_logic(df: pd.DataFrame) -> pd.Series:
                 "explanation": f"Error connecting to Claude. Returned default SMA Crossover strategy. Error: {str(e)}"
             }
     
+    async def chat(self, message: str, conversation_history: list = None) -> str:
+        """Chat with Claude (for general conversation)"""
+        try:
+            system_instruction = self.get_chat_system_instruction()
+            
+            # Build messages from history if provided
+            messages = []
+            if conversation_history:
+                for msg in conversation_history[-10:]:  # Limit to last 10 messages
+                    if isinstance(msg, dict) and "role" in msg and "content" in msg:
+                        # Claude uses "user" and "assistant" roles
+                        role = "user" if msg["role"] == "user" else "assistant"
+                        messages.append({
+                            "role": role,
+                            "content": msg["content"]
+                        })
+            
+            # Add current message
+            messages.append({
+                "role": "user",
+                "content": message
+            })
+            
+            message_response = self.client.messages.create(
+                model=self.model_name,
+                max_tokens=4000,
+                system=system_instruction,
+                messages=messages
+            )
+            
+            result_text = message_response.content[0].text if message_response.content else ""
+            if not result_text:
+                raise ValueError("No content generated")
+            
+            return result_text.strip()
+            
+        except Exception as e:
+            logger.error(f"Claude chat failed: {str(e)}", exc_info=True)
+            return f"I apologize, but I encountered an error: {str(e)}. Please try again or check your API configuration."
+    
     async def test_connection(self) -> bool:
         """Test Claude connection"""
         try:
