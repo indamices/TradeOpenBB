@@ -233,11 +233,41 @@ class OpenBBService:
                 except Exception as e:
                     logger.warning(f"OpenBB failed for {symbol}, using yfinance: {str(e)}")
             
-            # Fallback to yfinance
+            # Fallback to yfinance with retry
             if data is None or data.empty:
                 import yfinance as yf
-                ticker = yf.Ticker(symbol)
-                data = ticker.history(start=start_date, end=end_date)
+                max_retries = 3
+                retry_delay = 1
+                
+                for attempt in range(max_retries):
+                    try:
+                        if attempt > 0:
+                            time.sleep(retry_delay * attempt)
+                        
+                        ticker = yf.Ticker(symbol)
+                        data = ticker.history(start=start_date, end=end_date)
+                        
+                        if not data.empty:
+                            break
+                    except Exception as e:
+                        error_msg = str(e).lower()
+                        if "rate limit" in error_msg or "too many requests" in error_msg or "429" in error_msg:
+                            if attempt < max_retries - 1:
+                                wait_time = retry_delay * (2 ** attempt)
+                                logger.warning(f"Rate limited for {symbol} historical data, retrying after {wait_time}s")
+                                time.sleep(wait_time)
+                                continue
+                            else:
+                                raise ValueError(f"Too Many Requests. Rate limited. Try after a while.")
+                        else:
+                            if attempt < max_retries - 1:
+                                time.sleep(retry_delay)
+                                continue
+                            raise
+                
+                if data is None or data.empty:
+                    raise ValueError(f"No data found for symbol {symbol}")
+                
                 # Rename columns
                 data = data.rename(columns={
                     'Open': 'Open',

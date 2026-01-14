@@ -446,9 +446,20 @@ async def get_indicators(symbol: str, indicators: str = "MACD,RSI,BB", period: i
 
 @app.get("/api/market/overview")
 async def get_overview():
-    """Get market overview data"""
+    """Get market overview data (cached for 30 seconds)"""
     try:
+        # Use cache to reduce API calls
+        from cachetools import TTLCache
+        cache_key = "market_overview"
+        
+        if not hasattr(get_overview, '_cache'):
+            get_overview._cache = TTLCache(maxsize=1, ttl=30)
+        
+        if cache_key in get_overview._cache:
+            return get_overview._cache[cache_key]
+        
         overview = await get_market_overview()
+        get_overview._cache[cache_key] = overview
         return overview
     except Exception as e:
         logger.error(f"Failed to get market overview: {str(e)}")
