@@ -2,8 +2,14 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 import logging
+import time
+from cachetools import TTLCache
 
 logger = logging.getLogger(__name__)
+
+# Cache for market data (5 second TTL to reduce API calls)
+quote_cache = TTLCache(maxsize=500, ttl=5)
+data_cache = TTLCache(maxsize=200, ttl=30)  # Historical data cached longer
 
 # Try to import OpenBB, but make it optional
 try:
@@ -129,29 +135,76 @@ class OpenBBService:
                 except Exception as e:
                     logger.warning(f"OpenBB quote failed for {symbol}, using yfinance: {str(e)}")
             
-            # Use yfinance as primary/fallback
+            # Check cache first
+            cache_key = f"quote:{symbol}"
+            if cache_key in quote_cache:
+                return quote_cache[cache_key]
+            
+            # Use yfinance as primary/fallback with retry logic
             import yfinance as yf
-            ticker = yf.Ticker(symbol)
-            info = ticker.info
-            hist = ticker.history(period="1d")
+            max_retries = 3
+            retry_delay = 1  # seconds
             
-            if hist.empty:
-                raise ValueError(f"No quote data found for {symbol}")
+            for attempt in range(max_retries):
+                try:
+                    ticker = yf.Ticker(symbol)
+                    
+                    # Add delay between requests to avoid rate limiting
+                    if attempt > 0:
+                        time.sleep(retry_delay * attempt)
+                    
+                    info = ticker.info
+                    hist = ticker.history(period="1d")
+                    
+                    if hist.empty:
+                        if attempt < max_retries - 1:
+                            continue  # Retry
+                        raise ValueError(f"No quote data found for {symbol}")
+                    
+                    current_price = float(hist['Close'].iloc[-1])
+                    prev_close = float(info.get('previousClose', current_price))
+                    change = current_price - prev_close
+                    change_percent = (change / prev_close) * 100 if prev_close > 0 else 0
+                    
+                    result = {
+                        'price': current_price,
+                        'change': change,
+                        'change_percent': change_percent,
+                        'volume': int(hist['Volume'].iloc[-1])
+                    }
+                    
+                    # Cache the result
+                    quote_cache[cache_key] = result
+                    return result
+                    
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    # Check for rate limiting
+                    if "rate limit" in error_msg or "too many requests" in error_msg or "429" in error_msg:
+                        if attempt < max_retries - 1:
+                            wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                            logger.warning(f"Rate limited for {symbol}, retrying after {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            logger.error(f"Rate limit exceeded for {symbol} after {max_retries} attempts")
+                            raise ValueError(f"Too Many Requests. Rate limited. Try after a while.")
+                    else:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"Error fetching quote for {symbol} (attempt {attempt + 1}/{max_retries}): {str(e)}")
+                            time.sleep(retry_delay)
+                            continue
+                        else:
+                            logger.error(f"Error fetching quote for {symbol}: {str(e)}")
+                            raise ValueError(f"Failed to get quote for {symbol}: {str(e)}")
             
-            current_price = float(hist['Close'].iloc[-1])
-            prev_close = float(info.get('previousClose', current_price))
-            change = current_price - prev_close
-            change_percent = (change / prev_close) * 100 if prev_close > 0 else 0
+            # Should not reach here, but just in case
+            raise ValueError(f"Failed to get quote for {symbol} after {max_retries} attempts")
             
-            return {
-                'price': current_price,
-                'change': change,
-                'change_percent': change_percent,
-                'volume': int(hist['Volume'].iloc[-1])
-            }
-            
+        except ValueError:
+            raise  # Re-raise ValueError as-is
         except Exception as e:
-            logger.error(f"Error fetching quote for {symbol}: {str(e)}")
+            logger.error(f"Unexpected error fetching quote for {symbol}: {str(e)}")
             raise ValueError(f"Failed to get quote for {symbol}: {str(e)}")
     
     @staticmethod

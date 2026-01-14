@@ -76,7 +76,7 @@ async def get_technical_indicators(symbol: str, indicators: list, period: int = 
 
 async def get_multiple_quotes(symbols: List[str]) -> List[MarketQuote]:
     """
-    Get real-time quotes for multiple symbols
+    Get real-time quotes for multiple symbols with batching and error handling
     
     Args:
         symbols: List of stock symbols
@@ -84,14 +84,34 @@ async def get_multiple_quotes(symbols: List[str]) -> List[MarketQuote]:
     Returns:
         List of MarketQuote objects
     """
+    import asyncio
+    
     quotes = []
-    for symbol in symbols:
-        try:
-            quote = await get_realtime_quote(symbol.upper())
-            quotes.append(quote)
-        except Exception as e:
-            logger.warning(f"Failed to get quote for {symbol}: {str(e)}")
-            continue
+    # Process in smaller batches to avoid overwhelming the API
+    batch_size = 5
+    delay_between_batches = 0.5  # seconds
+    
+    for i in range(0, len(symbols), batch_size):
+        batch = symbols[i:i + batch_size]
+        
+        # Process batch concurrently
+        tasks = []
+        for symbol in batch:
+            tasks.append(get_realtime_quote(symbol.upper()))
+        
+        # Wait for batch to complete
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for symbol, result in zip(batch, results):
+            if isinstance(result, Exception):
+                logger.warning(f"Failed to get quote for {symbol}: {str(result)}")
+                continue
+            quotes.append(result)
+        
+        # Add delay between batches to avoid rate limiting
+        if i + batch_size < len(symbols):
+            await asyncio.sleep(delay_between_batches)
+    
     return quotes
 
 async def get_market_overview() -> Dict:

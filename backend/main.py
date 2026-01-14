@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from typing import List, Optional, Dict
 import logging
+import time
 
 # Use absolute imports for Docker deployment
 from database import get_db, init_db
@@ -39,6 +40,14 @@ logger = logging.getLogger(__name__)
 conversation_storage: Dict[str, List[Dict]] = {}
 
 app = FastAPI(title="SmartQuant API", version="1.0.0")
+
+# Add rate limiting middleware (60 requests per minute per IP)
+try:
+    from middleware import RateLimitMiddleware
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
+    logger.info("Rate limiting middleware enabled")
+except Exception as e:
+    logger.warning(f"Failed to enable rate limiting middleware: {str(e)}")
 
 # Global exception handlers
 @app.exception_handler(RequestValidationError)
@@ -173,8 +182,10 @@ async def startup_event():
 
 # Health check
 @app.get("/")
+@app.get("/health")
 async def root():
-    return {"message": "SmartQuant API", "status": "running"}
+    """Health check endpoint - optimized for fast response"""
+    return {"message": "SmartQuant API", "status": "running", "timestamp": time.time()}
 
 # Portfolio endpoints
 @app.get("/api/portfolio", response_model=PortfolioSchema)
@@ -393,9 +404,16 @@ async def get_quotes(symbols: str):
     """
     Get real-time quotes for multiple symbols
     Query parameter: symbols (comma-separated, e.g., "AAPL,MSFT,GOOGL")
+    Limited to 20 symbols per request to prevent overload
     """
     try:
         symbol_list = [s.strip().upper() for s in symbols.split(',')]
+        
+        # Limit number of symbols per request
+        if len(symbol_list) > 20:
+            logger.warning(f"Too many symbols requested ({len(symbol_list)}), limiting to 20")
+            symbol_list = symbol_list[:20]
+        
         quotes = await get_multiple_quotes(symbol_list)
         return quotes
     except Exception as e:
