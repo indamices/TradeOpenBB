@@ -11,11 +11,11 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab }) =>
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-    { id: 'trade', label: 'Execution', icon: <LineChart size={20} /> },
-    { id: 'strategy', label: 'AI Strategy Lab', icon: <Code2 size={20} /> },
-    { id: 'portfolio', label: 'Portfolio', icon: <Wallet size={20} /> },
-    { id: 'ai-settings', label: 'AI Settings', icon: <Settings size={20} /> },
+    { id: 'dashboard', label: '数据可视化', icon: <LayoutDashboard size={20} /> },
+    { id: 'backtest', label: '回测实验室', icon: <TestTube size={20} /> },
+    { id: 'ai-chat', label: 'AI策略助手', icon: <MessageSquare size={20} /> },
+    { id: 'portfolio', label: '投资组合', icon: <Wallet size={20} /> },
+    { id: 'ai-settings', label: 'AI设置', icon: <Settings size={20} /> },
   ];
 
   return (

@@ -1,0 +1,25 @@
+warning: in the working copy of 'render.yaml', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/render.yaml b/render.yaml[m
+[1mindex fb6e21e..211da01 100644[m
+[1m--- a/render.yaml[m
+[1m+++ b/render.yaml[m
+[36m@@ -55,14 +55,12 @@[m [mservices:[m
+     buildCommand: npm install && npm run build[m
+     staticPublishPath: ./dist[m
+     envVars:[m
+[31m-      # API base URL - set to backend service URL[m
+[32m+[m[32m      # API base URL - must be set to full backend service URL[m
+[32m+[m[32m      # Note: fromService doesn't work reliably for static sites during build[m
+[32m+[m[32m      # You may need to manually set this in Render Dashboard:[m
+[32m+[m[32m      # Go to tradeopenbb-frontend -> Environment -> Add: VITE_API_BASE_URL=https://tradeopenbb-backend.onrender.com[m
+       - key: VITE_API_BASE_URL[m
+[31m-        fromService:[m
+[31m-          name: tradeopenbb-backend[m
+[31m-          type: web[m
+[31m-          property: host[m
+[31m-        # If auto-detection doesn't work, manually set in Render Dashboard:[m
+[31m-        # VITE_API_BASE_URL=https://tradeopenbb-backend.onrender.com[m
+[32m+[m[32m        value: https://tradeopenbb-backend.onrender.com[m
+ [m
+ # Optional: PostgreSQL Database (uncomment if using PostgreSQL)[m
+ # Uncomment the database section below and update DATABASE_URL in backend service[m

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -194,6 +194,23 @@ class StrategyGenerationResponse(BaseModel):
     code: str
     explanation: str
 
+# AI Chat Schemas
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+    timestamp: datetime
+
+class ChatRequest(BaseModel):
+    message: str
+    conversation_id: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+
+class ChatResponse(BaseModel):
+    message: str
+    conversation_id: str
+    suggestions: Optional[List[str]] = None
+    code_snippets: Optional[Dict[str, str]] = None
+
 # Backtest Schemas
 class BacktestRequest(BaseModel):
     strategy_id: int
@@ -210,3 +227,7 @@ class BacktestResult(BaseModel):
     win_rate: Optional[float] = None
     total_trades: int
     total_return: float
+    # Time series data
+    equity_curve: Optional[List[Dict[str, Any]]] = None  # [{date: str, value: float}, ...]
+    drawdown_series: Optional[List[Dict[str, Any]]] = None  # [{date: str, drawdown: float}, ...]
+    trades: Optional[List[Dict[str, Any]]] = None  # [{date, symbol, side, price, quantity}, ...]

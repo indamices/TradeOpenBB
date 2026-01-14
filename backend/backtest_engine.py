@@ -203,6 +203,9 @@ async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
         
         common_dates = sorted(list(common_dates))
         
+        # Track equity curve with dates
+        equity_curve_with_dates = []
+        
         # Execute strategy for each date
         for date in common_dates:
             current_prices = {}
@@ -252,11 +255,47 @@ async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
             # Calculate portfolio value
             portfolio_value = engine.calculate_portfolio_value(current_prices)
             engine.equity_curve.append(portfolio_value)
+            # Track equity curve with dates
+            equity_curve_with_dates.append({
+                'date': date.isoformat() if isinstance(date, datetime) else str(date),
+                'value': float(portfolio_value)
+            })
         
         # Calculate metrics
         metrics = engine.calculate_metrics(engine.equity_curve)
         
-        return BacktestResult(**metrics)
+        # Calculate drawdown series
+        equity_array = np.array(engine.equity_curve)
+        running_max = np.maximum.accumulate(equity_array)
+        drawdown = (equity_array - running_max) / running_max * 100
+        
+        drawdown_series = []
+        for i, date in enumerate(common_dates):
+            drawdown_series.append({
+                'date': date.isoformat() if isinstance(date, datetime) else str(date),
+                'drawdown': float(abs(drawdown[i])) if i < len(drawdown) else 0.0
+            })
+        
+        # Format trades data
+        trades_data = []
+        for trade in engine.trades:
+            trade_date = trade['date']
+            trades_data.append({
+                'date': trade_date.isoformat() if isinstance(trade_date, datetime) else str(trade_date),
+                'symbol': trade['symbol'],
+                'side': trade['side'],
+                'price': float(trade['price']),
+                'quantity': int(trade['quantity']),
+                'commission': float(trade.get('commission', 0))
+            })
+        
+        # Return BacktestResult with time series data
+        return BacktestResult(
+            **metrics,
+            equity_curve=equity_curve_with_dates,
+            drawdown_series=drawdown_series,
+            trades=trades_data
+        )
         
     except Exception as e:
         logger.error(f"Backtest failed: {str(e)}")

@@ -57,7 +57,12 @@ jobs:
     - name: Run tests with pytest
       working-directory: ./backend
       run: |
-        pytest tests/ -v --cov=. --cov-report=xml --cov-report=html
+        pytest tests/ -v --cov=. --cov-report=xml --cov-report=html --tb=short
+        # This includes all test files:
+        # - test_backtest_timeseries.py (Backtest API with time series data)
+        # - test_api_market_extended.py (Extended market data APIs)
+        # - test_api_ai_chat.py (AI chat APIs)
+        # - All other existing test files
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3

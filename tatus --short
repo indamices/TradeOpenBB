@@ -1,0 +1,20 @@
+[1mdiff --git a/backend/schemas.py b/backend/schemas.py[m
+[1mindex da8330f..dba182c 100644[m
+[1m--- a/backend/schemas.py[m
+[1m+++ b/backend/schemas.py[m
+[36m@@ -1,5 +1,5 @@[m
+ from pydantic import BaseModel, Field, validator[m
+[31m-from typing import Optional, List[m
+[32m+[m[32mfrom typing import Optional, List, Dict, Any[m
+ from datetime import datetime[m
+ from enum import Enum[m
+ [m
+[36m@@ -210,3 +210,7 @@[m [mclass BacktestResult(BaseModel):[m
+     win_rate: Optional[float] = None[m
+     total_trades: int[m
+     total_return: float[m
+[32m+[m[32m    # Time series data[m
+[32m+[m[32m    equity_curve: Optional[List[Dict[str, Any]]] = None  # [{date: str, value: float}, ...][m
+[32m+[m[32m    drawdown_series: Optional[List[Dict[str, Any]]] = None  # [{date: str, drawdown: float}, ...][m
+[32m+[m[32m    trades: Optional[List[Dict[str, Any]]] = None  # [{date, symbol, side, price, quantity}, ...][m
+\ No newline at end of file[m

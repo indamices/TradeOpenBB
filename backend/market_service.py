@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict
 import logging
 
 try:
@@ -72,4 +72,54 @@ async def get_technical_indicators(symbol: str, indicators: list, period: int = 
         return data
     except Exception as e:
         logger.error(f"Failed to get technical indicators for {symbol}: {str(e)}")
+        raise
+
+async def get_multiple_quotes(symbols: List[str]) -> List[MarketQuote]:
+    """
+    Get real-time quotes for multiple symbols
+    
+    Args:
+        symbols: List of stock symbols
+    
+    Returns:
+        List of MarketQuote objects
+    """
+    quotes = []
+    for symbol in symbols:
+        try:
+            quote = await get_realtime_quote(symbol.upper())
+            quotes.append(quote)
+        except Exception as e:
+            logger.warning(f"Failed to get quote for {symbol}: {str(e)}")
+            continue
+    return quotes
+
+async def get_market_overview() -> Dict:
+    """
+    Get market overview data
+    
+    Returns:
+        Dictionary with market statistics
+    """
+    # For now, return a simple overview
+    # In production, this would aggregate data from multiple sources
+    try:
+        # Get quotes for major indices/stocks
+        major_symbols = ['SPY', 'QQQ', 'DIA', 'AAPL', 'MSFT', 'GOOGL']
+        quotes = await get_multiple_quotes(major_symbols)
+        
+        # Calculate basic statistics
+        up_count = sum(1 for q in quotes if q.change >= 0)
+        down_count = len(quotes) - up_count
+        total_volume = sum(q.volume for q in quotes)
+        
+        return {
+            'total_symbols': len(quotes),
+            'up_count': up_count,
+            'down_count': down_count,
+            'total_volume': total_volume,
+            'timestamp': datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get market overview: {str(e)}")
         raise

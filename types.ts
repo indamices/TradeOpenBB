@@ -84,6 +84,17 @@ export interface BacktestResult {
   win_rate?: number;
   total_trades: number;
   total_return: number;
+  // Time series data
+  equity_curve?: Array<{date: string, value: number}>;
+  drawdown_series?: Array<{date: string, drawdown: number}>;
+  trades?: Array<{
+    date: string;
+    symbol: string;
+    side: 'BUY' | 'SELL';
+    price: number;
+    quantity: number;
+    commission?: number;
+  }>;
 }
 
 // AI Model Config Types
@@ -106,4 +117,33 @@ export interface AIModelConfigCreate {
   api_key: string;
   model_name: string;
   base_url?: string;
+}
+
+// AI Chat Types
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  code_snippets?: Array<{language: string, code: string}>;
+}
+
+export interface ChatRequest {
+  message: string;
+  conversation_id?: string;
+  context?: {
+    strategy_id?: number;
+    backtest_result_id?: number;
+  };
+}
+
+export interface ChatResponse {
+  message: string;
+  conversation_id: string;
+  suggestions?: string[];
+  code_snippets?: {[key: string]: string};
+}
+
+export interface ChatConversation {
+  conversation_id: string;
+  messages: ChatMessage[];
 }
