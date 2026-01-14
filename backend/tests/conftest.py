@@ -54,40 +54,60 @@ def sample_portfolio_data():
     """Sample portfolio data for testing"""
     return {
         "name": "Test Portfolio",
-        "initial_cash": 100000.0,
-        "current_cash": 100000.0,
-        "total_value": 100000.0
+        "initial_cash": 100000.0
     }
 
 @pytest.fixture
-def sample_order_data():
+def default_portfolio(db_session):
+    """Create a default portfolio for testing and return its ID"""
+    from models import Portfolio
+    # Check if portfolio with ID 1 exists
+    portfolio = db_session.query(Portfolio).filter(Portfolio.id == 1).first()
+    if not portfolio:
+        # Create default portfolio
+        portfolio = Portfolio(
+            name="Test Portfolio",
+            initial_cash=100000.0,
+            current_cash=100000.0,
+            total_value=100000.0,
+            daily_pnl=0.0,
+            daily_pnl_percent=0.0
+        )
+        db_session.add(portfolio)
+        db_session.commit()
+        db_session.refresh(portfolio)
+    return portfolio.id
+
+@pytest.fixture
+def sample_order_data(default_portfolio):
     """Sample order data for testing"""
     return {
         "symbol": "AAPL",
         "side": "BUY",
         "type": "MARKET",
         "quantity": 10,
-        "price": 150.0
+        "portfolio_id": default_portfolio
     }
 
 @pytest.fixture
-def sample_position_data():
+def sample_position_data(default_portfolio):
     """Sample position data for testing"""
     return {
         "symbol": "AAPL",
         "quantity": 10,
         "avg_price": 150.0,
-        "current_price": 155.0
+        "current_price": 155.0,
+        "portfolio_id": default_portfolio
     }
 
 @pytest.fixture
-def sample_strategy_data():
+def sample_strategy_data(default_portfolio):
     """Sample strategy data for testing"""
     return {
         "name": "Test Strategy",
         "description": "A test strategy",
-        "code": "def strategy(data):\n    return 'BUY'",
-        "parameters": {}
+        "logic_code": "def strategy(data):\n    return 'BUY'",
+        "target_portfolio_id": default_portfolio
     }
 
 @pytest.fixture

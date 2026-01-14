@@ -39,14 +39,14 @@ def test_order_validation(client):
     response = client.post("/api/orders", json=invalid_data)
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-def test_order_side_enum(client):
+def test_order_side_enum(client, default_portfolio):
     """Test order with valid side enum"""
     order_data = {
         "symbol": "AAPL",
         "side": "BUY",
         "type": "MARKET",
         "quantity": 10,
-        "price": 150.0
+        "portfolio_id": default_portfolio
     }
     response = client.post("/api/orders", json=order_data)
     assert response.status_code == status.HTTP_201_CREATED

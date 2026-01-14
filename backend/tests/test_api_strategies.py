@@ -16,7 +16,7 @@ def test_create_strategy(client, sample_strategy_data):
     assert response.status_code == status.HTTP_201_CREATED
     data = response.json()
     assert data["name"] == sample_strategy_data["name"]
-    assert data["code"] == sample_strategy_data["code"]
+    assert data["logic_code"] == sample_strategy_data["logic_code"]
     assert "id" in data
 
 def test_get_strategies(client, sample_strategy_data):
@@ -34,9 +34,7 @@ def test_get_strategies(client, sample_strategy_data):
 def test_generate_strategy_mock(client):
     """Test strategy generation (mocked)"""
     request_data = {
-        "description": "A simple moving average strategy",
-        "symbol": "AAPL",
-        "timeframe": "1d"
+        "prompt": "Create a simple moving average crossover strategy for AAPL"
     }
     # This will fail if AI service is not configured, but should return proper error
     response = client.post("/api/strategies/generate", json=request_data)
