@@ -120,7 +120,9 @@ async def general_exception_handler(request: Request, exc: Exception):
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:113","message":"Exception handler triggered","data":{"path":request.url.path,"method":request.method,"exception_type":type(exc).__name__,"exception_msg":str(exc)[:100],"origin":request.headers.get("origin")}})+'\n')
-    except: pass
+    except Exception as log_exc:
+        # Don't fail if logging fails - just log to stderr
+        logger.error(f"Failed to write debug log: {log_exc}")
     # #endregion
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     response = JSONResponse(
@@ -148,9 +150,11 @@ async def general_exception_handler(request: Request, exc: Exception):
             try:
                 import os, json
                 log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, 'a', encoding='utf-8') as f:
                     f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:148","message":"CORS headers added to exception response","data":{"origin":origin}})+'\n')
-            except: pass
+            except Exception as log_exc:
+                logger.error(f"Failed to write debug log: {log_exc}")
             # #endregion
     return response
 
