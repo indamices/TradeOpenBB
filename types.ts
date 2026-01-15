@@ -45,6 +45,24 @@ export interface Strategy {
   is_active: boolean;
   target_portfolio_id: number;
   description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SetStrategyActiveRequest {
+  is_active: boolean;
+}
+
+export interface BatchSetActiveRequest {
+  strategy_ids: number[];
+  is_active: boolean;
+}
+
+export interface StrategyUpdate {
+  name?: string;
+  logic_code?: string;
+  description?: string;
+  is_active?: boolean;
 }
 
 export interface MarketQuote {
@@ -187,4 +205,47 @@ export interface TimeRange {
   start: string;
   end: string;
   label?: string;
+}
+
+// Conversation Types
+export interface Conversation {
+  id: number;
+  conversation_id: string;
+  title?: string;
+  created_at: string;
+  updated_at?: string;
+  message_count: number;
+}
+
+export interface ConversationDetail {
+  conversation_id: string;
+  title?: string;
+  created_at: string;
+  updated_at?: string;
+  messages: Array<{
+    id: number;
+    conversation_id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    code_snippets?: { [key: string]: string };
+    created_at: string;
+  }>;
+}
+
+export interface ChatStrategy {
+  id: number;
+  conversation_id: string;
+  message_id?: number;
+  name: string;
+  logic_code: string;
+  description?: string;
+  is_saved: boolean;
+  saved_strategy_id?: number;
+  created_at: string;
+}
+
+export interface SaveStrategyRequest {
+  name: string;
+  description?: string;
+  target_portfolio_id?: number;
 }

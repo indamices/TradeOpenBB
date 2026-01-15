@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Settings, Menu, X, Wallet, TestTube, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Settings, Menu, X, Wallet, TestTube, MessageSquare, FolderKanban } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -14,6 +14,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab }) =>
     { id: 'dashboard', label: '数据可视化', icon: <LayoutDashboard size={20} /> },
     { id: 'backtest', label: '回测实验室', icon: <TestTube size={20} /> },
     { id: 'ai-chat', label: 'AI策略助手', icon: <MessageSquare size={20} /> },
+    { id: 'strategy-manager', label: '策略管理', icon: <FolderKanban size={20} /> },
     { id: 'portfolio', label: '投资组合', icon: <Wallet size={20} /> },
     { id: 'ai-settings', label: 'AI设置', icon: <Settings size={20} /> },
   ];

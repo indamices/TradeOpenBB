@@ -19,7 +19,7 @@ import time
 
 # Use absolute imports for Docker deployment
 from database import get_db, init_db
-from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base, StockPool, StockInfo
+from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base, StockPool, StockInfo, Conversation, ConversationMessage, ChatStrategy, BacktestSymbolList
 from schemas import (
     Portfolio as PortfolioSchema, PortfolioCreate, PortfolioUpdate,
     Position as PositionSchema, PositionCreate, PositionUpdate,
@@ -29,7 +29,9 @@ from schemas import (
     AIModelConfigCreate, AIModelConfigUpdate, AIModelConfigResponse,
     BacktestRequest, BacktestResult, ChatRequest, ChatResponse,
     StockPool as StockPoolSchema, StockPoolCreate, StockPoolUpdate,
-    StockInfo as StockInfoSchema, DataSyncRequest, DataSyncResponse
+    StockInfo as StockInfoSchema, DataSyncRequest, DataSyncResponse,
+    Conversation, ConversationMessage, ChatStrategy, ChatStrategyCreate, SaveStrategyRequest,
+    SymbolList, SymbolListCreate, SymbolListUpdate, SetStrategyActiveRequest, BatchSetActiveRequest
 )
 from market_service import get_realtime_quote, get_multiple_quotes, get_market_overview, get_technical_indicators
 from ai_service_factory import generate_strategy, chat_with_ai
@@ -38,7 +40,7 @@ from backtest_engine import run_backtest
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Simple in-memory conversation storage (in production, use database)
+# Note: Conversation storage is now in database, but keeping this for backward compatibility during migration
 conversation_storage: Dict[str, List[Dict]] = {}
 
 app = FastAPI(title="SmartQuant API", version="1.0.0")
@@ -403,11 +405,30 @@ async def create_order(order: OrderCreate, db: Session = Depends(get_db)):
 
 # Strategy endpoints
 @app.get("/api/strategies", response_model=List[StrategySchema])
-async def get_strategies(portfolio_id: Optional[int] = None, db: Session = Depends(get_db)):
+async def get_strategies(
+    portfolio_id: Optional[int] = None,
+    is_active: Optional[bool] = None,  # 新增：按活跃状态过滤
+    db: Session = Depends(get_db)
+):
+    """获取策略列表（支持按活跃状态过滤）"""
     query = db.query(Strategy)
     if portfolio_id:
         query = query.filter(Strategy.target_portfolio_id == portfolio_id)
-    strategies = query.all()
+    if is_active is not None:
+        query = query.filter(Strategy.is_active == is_active)
+    strategies = query.order_by(Strategy.created_at.desc()).all()
+    return strategies
+
+@app.get("/api/strategies/active", response_model=List[StrategySchema])
+async def get_active_strategies(
+    portfolio_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """获取所有活跃策略（用于回测实验室）"""
+    query = db.query(Strategy).filter(Strategy.is_active == True)
+    if portfolio_id:
+        query = query.filter(Strategy.target_portfolio_id == portfolio_id)
+    strategies = query.order_by(Strategy.created_at.desc()).all()
     return strategies
 
 @app.post("/api/strategies", response_model=StrategySchema, status_code=status.HTTP_201_CREATED)
@@ -417,6 +438,82 @@ async def create_strategy(strategy: StrategyCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(db_strategy)
     return db_strategy
+
+@app.put("/api/strategies/{strategy_id}", response_model=StrategySchema)
+async def update_strategy(strategy_id: int, strategy: StrategyUpdate, db: Session = Depends(get_db)):
+    """更新策略（包括活跃状态）"""
+    db_strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
+    if not db_strategy:
+        raise HTTPException(status_code=404, detail="Strategy not found")
+    
+    update_data = strategy.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_strategy, field, value)
+    
+    db.commit()
+    db.refresh(db_strategy)
+    return db_strategy
+
+@app.put("/api/strategies/{strategy_id}/set-active", response_model=StrategySchema)
+async def set_strategy_active(
+    strategy_id: int,
+    request: SetStrategyActiveRequest,
+    db: Session = Depends(get_db)
+):
+    """设置策略活跃状态（显式设置True/False）"""
+    db_strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
+    if not db_strategy:
+        raise HTTPException(status_code=404, detail="Strategy not found")
+    
+    db_strategy.is_active = request.is_active
+    db.commit()
+    db.refresh(db_strategy)
+    return db_strategy
+
+@app.put("/api/strategies/{strategy_id}/toggle-active", response_model=StrategySchema)
+async def toggle_strategy_active(strategy_id: int, db: Session = Depends(get_db)):
+    """切换策略活跃状态（当前状态取反）"""
+    db_strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
+    if not db_strategy:
+        raise HTTPException(status_code=404, detail="Strategy not found")
+    
+    db_strategy.is_active = not db_strategy.is_active
+    db.commit()
+    db.refresh(db_strategy)
+    return db_strategy
+
+@app.put("/api/strategies/batch-set-active")
+async def batch_set_strategy_active(
+    request: BatchSetActiveRequest,
+    db: Session = Depends(get_db)
+):
+    """批量设置多个策略的活跃状态"""
+    strategies = db.query(Strategy).filter(Strategy.id.in_(request.strategy_ids)).all()
+    if len(strategies) != len(request.strategy_ids):
+        raise HTTPException(status_code=404, detail="Some strategies not found")
+    
+    for strategy in strategies:
+        strategy.is_active = request.is_active
+    
+    db.commit()
+    return {"updated": len(strategies), "strategies": [s.id for s in strategies]}
+
+@app.delete("/api/strategies/{strategy_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_strategy(strategy_id: int, db: Session = Depends(get_db)):
+    """删除策略"""
+    db_strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
+    if not db_strategy:
+        raise HTTPException(status_code=404, detail="Strategy not found")
+    
+    # 更新关联的ChatStrategy记录
+    db.query(ChatStrategy).filter(ChatStrategy.saved_strategy_id == strategy_id).update({
+        "is_saved": False,
+        "saved_strategy_id": None
+    })
+    
+    db.delete(db_strategy)
+    db.commit()
+    return None
 
 @app.post("/api/strategies/generate", response_model=StrategyGenerationResponse)
 async def generate_strategy_endpoint(request: StrategyGenerationRequest, db: Session = Depends(get_db)):
@@ -428,61 +525,96 @@ async def generate_strategy_endpoint(request: StrategyGenerationRequest, db: Ses
         logger.error(f"Strategy generation failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Strategy generation failed: {str(e)}")
 
-# AI Chat endpoints
+# AI Chat endpoints (使用数据库持久化)
 @app.post("/api/ai/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
-    """AI chat conversation"""
-    # #region agent log
-    try:
-        import os, json
-        log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:354","message":"chat_endpoint called","data":{"path":"/api/ai/chat","message_length":len(request.message)}})+'\n')
-    except: pass
-    # #endregion
+    """AI chat conversation (持久化到数据库)"""
     try:
         import uuid
         from datetime import datetime
         
-        # Get or create conversation ID
-        conversation_id = request.conversation_id or str(uuid.uuid4())
+        # Get or create conversation
+        conversation_id = request.conversation_id
+        conversation = None
         
-        # Initialize conversation if new
-        if conversation_id not in conversation_storage:
-            conversation_storage[conversation_id] = []
+        if conversation_id:
+            conversation = db.query(Conversation).filter(
+                Conversation.conversation_id == conversation_id
+            ).first()
         
-        # Add user message to history
-        conversation_storage[conversation_id].append({
-            'role': 'user',
-            'content': request.message,
-            'timestamp': datetime.now().isoformat()
-        })
+        # Create new conversation if needed
+        if not conversation:
+            conversation_id = str(uuid.uuid4())
+            # 从第一条消息提取标题（前50个字符）
+            title = request.message[:50] if request.message else "New Conversation"
+            conversation = Conversation(
+                conversation_id=conversation_id,
+                title=title
+            )
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
         
-        # Use dedicated chat function instead of strategy generation
-        # This allows for natural conversation without requiring JSON format
-        conversation_history = conversation_storage.get(conversation_id, [])
+        # Save user message to database
+        user_message = ConversationMessage(
+            conversation_id=conversation_id,
+            role='user',
+            content=request.message
+        )
+        db.add(user_message)
+        db.commit()
         
+        # Get conversation history for AI context
+        messages = db.query(ConversationMessage).filter(
+            ConversationMessage.conversation_id == conversation_id
+        ).order_by(ConversationMessage.created_at).all()
+        
+        # Convert to format expected by AI service
+        conversation_history = [
+            {
+                'role': msg.role,
+                'content': msg.content,
+                'timestamp': msg.created_at.isoformat()
+            }
+            for msg in messages[:-1]  # Exclude current message
+        ]
+        
+        # Call AI service
         try:
             ai_response = await chat_with_ai(
-                request.message, 
+                request.message,
                 None,  # Use default model
                 db,
                 conversation_history=conversation_history
             )
-            code_snippets = None  # Can be extracted from response if needed
+            code_snippets = None
+            
+            # 尝试从响应中提取代码片段
+            import re
+            code_pattern = r'```python\n(.*?)\n```'
+            matches = re.findall(code_pattern, ai_response, re.DOTALL)
+            if matches:
+                code_snippets = {"python": matches[0]}
+                logger.info(f"Extracted code snippet from AI response")
+            
         except Exception as e:
             logger.error(f"Chat failed: {str(e)}", exc_info=True)
-            # Fallback response
-            ai_response = "I apologize, but I encountered an error. Please try again or check your AI model configuration."
+            ai_response = "抱歉，发生了错误。请重试或检查AI模型配置。"
             code_snippets = None
         
-        # Add assistant response to history
-        conversation_storage[conversation_id].append({
-            'role': 'assistant',
-            'content': ai_response,
-            'timestamp': datetime.now().isoformat()
-        })
+        # Save assistant response to database
+        assistant_message = ConversationMessage(
+            conversation_id=conversation_id,
+            role='assistant',
+            content=ai_response,
+            code_snippets=code_snippets
+        )
+        db.add(assistant_message)
+        
+        # Update conversation updated_at
+        conversation.updated_at = datetime.now()
+        
+        db.commit()
         
         return ChatResponse(
             message=ai_response,
@@ -491,18 +623,133 @@ async def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
             code_snippets=code_snippets
         )
     except Exception as e:
-        logger.error(f"Chat failed: {str(e)}")
+        logger.error(f"Chat failed: {str(e)}", exc_info=True)
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
 
-@app.get("/api/ai/chat/{conversation_id}")
-async def get_conversation_history(conversation_id: str):
-    """Get conversation history"""
+@app.get("/api/ai/conversations", response_model=List[Conversation])
+async def get_conversations(db: Session = Depends(get_db)):
+    """获取所有聊天会话列表"""
     try:
-        if conversation_id not in conversation_storage:
+        conversations = db.query(Conversation).order_by(
+            Conversation.updated_at.desc()
+        ).all()
+        
+        # 添加消息数量
+        result = []
+        for conv in conversations:
+            message_count = db.query(ConversationMessage).filter(
+                ConversationMessage.conversation_id == conv.conversation_id
+            ).count()
+            
+            conv_dict = {
+                "id": conv.id,
+                "conversation_id": conv.conversation_id,
+                "title": conv.title,
+                "created_at": conv.created_at,
+                "updated_at": conv.updated_at,
+                "message_count": message_count
+            }
+            result.append(conv_dict)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get conversations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get conversations: {str(e)}")
+
+@app.get("/api/ai/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    """获取会话详情（包含消息）"""
+    try:
+        conversation = db.query(Conversation).filter(
+            Conversation.conversation_id == conversation_id
+        ).first()
+        
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        # Get messages
+        messages = db.query(ConversationMessage).filter(
+            ConversationMessage.conversation_id == conversation_id
+        ).order_by(ConversationMessage.created_at).all()
+        
+        # Convert to ChatMessage format
+        chat_messages = [
+            {
+                "id": msg.id,
+                "conversation_id": msg.conversation_id,
+                "role": msg.role,
+                "content": msg.content,
+                "code_snippets": msg.code_snippets,
+                "timestamp": msg.created_at.isoformat()
+            }
+            for msg in messages
+        ]
+        
+        return {
+            "conversation_id": conversation.conversation_id,
+            "title": conversation.title,
+            "created_at": conversation.created_at.isoformat(),
+            "updated_at": conversation.updated_at.isoformat() if conversation.updated_at else None,
+            "messages": chat_messages
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get conversation: {str(e)}")
+
+@app.delete("/api/ai/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    """删除会话及其消息"""
+    try:
+        conversation = db.query(Conversation).filter(
+            Conversation.conversation_id == conversation_id
+        ).first()
+        
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        # Messages will be deleted via cascade
+        db.delete(conversation)
+        db.commit()
+        return None
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete conversation: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete conversation: {str(e)}")
+
+@app.get("/api/ai/chat/{conversation_id}")
+async def get_conversation_history(conversation_id: str, db: Session = Depends(get_db)):
+    """Get conversation history (兼容旧API)"""
+    try:
+        conversation = db.query(Conversation).filter(
+            Conversation.conversation_id == conversation_id
+        ).first()
+        
+        if not conversation:
             return {"conversation_id": conversation_id, "messages": []}
+        
+        messages = db.query(ConversationMessage).filter(
+            ConversationMessage.conversation_id == conversation_id
+        ).order_by(ConversationMessage.created_at).all()
+        
+        # Convert to old format for compatibility
+        message_list = [
+            {
+                'role': msg.role,
+                'content': msg.content,
+                'timestamp': msg.created_at.isoformat(),
+                'code_snippets': msg.code_snippets
+            }
+            for msg in messages
+        ]
+        
         return {
             "conversation_id": conversation_id,
-            "messages": conversation_storage[conversation_id]
+            "messages": message_list
         }
     except Exception as e:
         logger.error(f"Failed to get conversation history: {str(e)}")
@@ -953,3 +1200,255 @@ async def reset_daily_limit():
     except Exception as e:
         logger.error(f"Failed to reset daily limit: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to reset daily limit: {str(e)}")
+
+# Chat Strategy endpoints (策略提取与保存)
+@app.post("/api/ai/conversations/{conversation_id}/extract-strategies", response_model=List[ChatStrategy])
+async def extract_strategies(
+    conversation_id: str,
+    message_id: int,
+    db: Session = Depends(get_db)
+):
+    """从指定消息中提取策略代码（自动识别）"""
+    try:
+        from services.strategy_extraction import auto_extract_strategies_from_message
+        
+        # 获取消息
+        message = db.query(ConversationMessage).filter(
+            ConversationMessage.id == message_id,
+            ConversationMessage.conversation_id == conversation_id
+        ).first()
+        
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        
+        if message.role != 'assistant':
+            raise HTTPException(status_code=400, detail="Can only extract strategies from assistant messages")
+        
+        # 使用策略提取服务自动提取
+        extracted_strategies = auto_extract_strategies_from_message(
+            message.content,
+            message.code_snippets
+        )
+        
+        if not extracted_strategies:
+            raise HTTPException(status_code=400, detail="No strategy code found in message")
+        
+        # 为每个提取的策略创建ChatStrategy记录
+        chat_strategies = []
+        for strategy_info in extracted_strategies:
+            # 检查是否已经提取过相同的策略（基于代码内容）
+            existing = db.query(ChatStrategy).filter(
+                ChatStrategy.conversation_id == conversation_id,
+                ChatStrategy.message_id == message_id,
+                ChatStrategy.logic_code == strategy_info['code']
+            ).first()
+            
+            if existing:
+                chat_strategies.append(existing)
+                continue
+            
+            chat_strategy = ChatStrategy(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                name=strategy_info['name'],
+                logic_code=strategy_info['code'],
+                description=strategy_info.get('description')
+            )
+            db.add(chat_strategy)
+            chat_strategies.append(chat_strategy)
+        
+        db.commit()
+        
+        # Refresh all strategies
+        for cs in chat_strategies:
+            db.refresh(cs)
+        
+        return chat_strategies
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to extract strategy: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to extract strategy: {str(e)}")
+
+@app.get("/api/ai/conversations/{conversation_id}/strategies", response_model=List[ChatStrategy])
+async def get_chat_strategies(conversation_id: str, db: Session = Depends(get_db)):
+    """获取会话中提取的所有策略"""
+    try:
+        strategies = db.query(ChatStrategy).filter(
+            ChatStrategy.conversation_id == conversation_id
+        ).order_by(ChatStrategy.created_at.desc()).all()
+        return strategies
+    except Exception as e:
+        logger.error(f"Failed to get chat strategies: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get chat strategies: {str(e)}")
+
+@app.post("/api/ai/chat-strategies/{chat_strategy_id}/save", response_model=StrategySchema)
+async def save_chat_strategy(
+    chat_strategy_id: int,
+    request: SaveStrategyRequest,
+    db: Session = Depends(get_db)
+):
+    """保存聊天中的策略到策略池"""
+    try:
+        # 获取聊天策略
+        chat_strategy = db.query(ChatStrategy).filter(
+            ChatStrategy.id == chat_strategy_id
+        ).first()
+        
+        if not chat_strategy:
+            raise HTTPException(status_code=404, detail="Chat strategy not found")
+        
+        if chat_strategy.is_saved:
+            raise HTTPException(status_code=400, detail="Strategy already saved")
+        
+        # 创建策略记录
+        db_strategy = Strategy(
+            name=request.name,
+            logic_code=chat_strategy.logic_code,
+            description=request.description or chat_strategy.description,
+            target_portfolio_id=request.target_portfolio_id,
+            is_active=False  # 默认不活跃，用户需要手动激活
+        )
+        db.add(db_strategy)
+        db.commit()
+        db.refresh(db_strategy)
+        
+        # 更新ChatStrategy记录
+        chat_strategy.is_saved = True
+        chat_strategy.saved_strategy_id = db_strategy.id
+        db.commit()
+        
+        return db_strategy
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to save chat strategy: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save chat strategy: {str(e)}")
+
+@app.delete("/api/ai/chat-strategies/{chat_strategy_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_chat_strategy(chat_strategy_id: int, db: Session = Depends(get_db)):
+    """删除聊天中的策略"""
+    try:
+        chat_strategy = db.query(ChatStrategy).filter(
+            ChatStrategy.id == chat_strategy_id
+        ).first()
+        
+        if not chat_strategy:
+            raise HTTPException(status_code=404, detail="Chat strategy not found")
+        
+        # 如果已保存到策略池，只删除ChatStrategy记录，保留Strategy记录
+        # 用户可以从策略管理页面删除Strategy
+        
+        db.delete(chat_strategy)
+        db.commit()
+        return None
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete chat strategy: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete chat strategy: {str(e)}")
+
+# Backtest Symbol List endpoints (回测标的清单)
+@app.get("/api/backtest/symbol-lists", response_model=List[SymbolList])
+async def get_symbol_lists(
+    is_active: Optional[bool] = None,
+    db: Session = Depends(get_db)
+):
+    """获取所有回测标的清单"""
+    try:
+        query = db.query(BacktestSymbolList)
+        if is_active is not None:
+            query = query.filter(BacktestSymbolList.is_active == is_active)
+        lists = query.order_by(BacktestSymbolList.created_at.desc()).all()
+        return lists
+    except Exception as e:
+        logger.error(f"Failed to get symbol lists: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get symbol lists: {str(e)}")
+
+@app.get("/api/backtest/symbol-lists/{list_id}", response_model=SymbolList)
+async def get_symbol_list(list_id: int, db: Session = Depends(get_db)):
+    """获取特定清单"""
+    try:
+        symbol_list = db.query(BacktestSymbolList).filter(
+            BacktestSymbolList.id == list_id
+        ).first()
+        
+        if not symbol_list:
+            raise HTTPException(status_code=404, detail="Symbol list not found")
+        
+        return symbol_list
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get symbol list: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get symbol list: {str(e)}")
+
+@app.post("/api/backtest/symbol-lists", response_model=SymbolList, status_code=status.HTTP_201_CREATED)
+async def create_symbol_list(list: SymbolListCreate, db: Session = Depends(get_db)):
+    """创建回测标的清单"""
+    try:
+        db_list = BacktestSymbolList(**list.dict())
+        db.add(db_list)
+        db.commit()
+        db.refresh(db_list)
+        return db_list
+    except Exception as e:
+        logger.error(f"Failed to create symbol list: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create symbol list: {str(e)}")
+
+@app.put("/api/backtest/symbol-lists/{list_id}", response_model=SymbolList)
+async def update_symbol_list(
+    list_id: int,
+    list_update: SymbolListUpdate,
+    db: Session = Depends(get_db)
+):
+    """更新回测标的清单"""
+    try:
+        db_list = db.query(BacktestSymbolList).filter(
+            BacktestSymbolList.id == list_id
+        ).first()
+        
+        if not db_list:
+            raise HTTPException(status_code=404, detail="Symbol list not found")
+        
+        update_data = list_update.dict(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(db_list, field, value)
+        
+        db.commit()
+        db.refresh(db_list)
+        return db_list
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update symbol list: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update symbol list: {str(e)}")
+
+@app.delete("/api/backtest/symbol-lists/{list_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_symbol_list(list_id: int, db: Session = Depends(get_db)):
+    """删除回测标的清单"""
+    try:
+        db_list = db.query(BacktestSymbolList).filter(
+            BacktestSymbolList.id == list_id
+        ).first()
+        
+        if not db_list:
+            raise HTTPException(status_code=404, detail="Symbol list not found")
+        
+        db.delete(db_list)
+        db.commit()
+        return None
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete symbol list: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete symbol list: {str(e)}")

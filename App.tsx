@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import BacktestLab from './components/BacktestLab';
 import AIChatAssistant from './components/AIChatAssistant';
 import StrategyLab from './components/StrategyLab';
+import StrategyManager from './components/StrategyManager';
 import AIModelSettings from './components/AIModelSettings';
 import { Wallet } from 'lucide-react';
 
@@ -20,6 +21,8 @@ const App: React.FC = () => {
         return <AIChatAssistant />;
       case 'strategy':
         return <StrategyLab />;
+      case 'strategy-manager':
+        return <StrategyManager />;
       case 'portfolio':
         return (
             <div className="flex flex-col items-center justify-center h-[50vh] text-slate-500">

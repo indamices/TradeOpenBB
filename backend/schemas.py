@@ -275,6 +275,89 @@ class DataSyncResponse(BaseModel):
     symbols_processed: int
     records_added: int
 
+# Conversation Schemas
+class ConversationBase(BaseModel):
+    title: Optional[str] = None
+
+class Conversation(ConversationBase):
+    id: int
+    conversation_id: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    message_count: int = 0  # 消息数量
+    
+    class Config:
+        from_attributes = True
+
+class ConversationMessage(BaseModel):
+    id: int
+    conversation_id: str
+    role: str  # 'user' or 'assistant'
+    content: str
+    code_snippets: Optional[Dict[str, str]] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+# ChatStrategy Schemas
+class ChatStrategyBase(BaseModel):
+    name: str
+    logic_code: str
+    description: Optional[str] = None
+
+class ChatStrategyCreate(ChatStrategyBase):
+    conversation_id: str
+    message_id: Optional[int] = None
+
+class ChatStrategy(ChatStrategyBase):
+    id: int
+    conversation_id: str
+    message_id: Optional[int] = None
+    is_saved: bool
+    saved_strategy_id: Optional[int] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class SaveStrategyRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    target_portfolio_id: int = 1
+
+# BacktestSymbolList Schemas
+class SymbolListBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    symbols: List[str]
+
+class SymbolListCreate(SymbolListBase):
+    pass
+
+class SymbolListUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    symbols: Optional[List[str]] = None
+    is_active: Optional[bool] = None
+
+class SymbolList(SymbolListBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+# Strategy Active Status Schemas
+class SetStrategyActiveRequest(BaseModel):
+    is_active: bool
+
+class BatchSetActiveRequest(BaseModel):
+    strategy_ids: List[int]
+    is_active: bool
+
 # Backtest Schemas
 class BacktestRequest(BaseModel):
     strategy_id: int

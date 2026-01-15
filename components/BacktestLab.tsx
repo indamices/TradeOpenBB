@@ -12,10 +12,12 @@ import { tradingService } from '../services/tradingService';
 import { ApiError } from '../services/apiClient';
 import StockPoolManager from './StockPoolManager';
 import TimeRangeSelector from './TimeRangeSelector';
+import BacktestSymbolList from './BacktestSymbolList';
 
 const BacktestLab: React.FC = () => {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState<number | null>(null);
+  const [showActiveOnly, setShowActiveOnly] = useState<boolean>(true);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedPoolId, setSelectedPoolId] = useState<number | null>(null);
@@ -39,7 +41,10 @@ const BacktestLab: React.FC = () => {
 
   const loadStrategies = async () => {
     try {
-      const data = await tradingService.getStrategies();
+      // Load strategies based on filter
+      const data = showActiveOnly 
+        ? await tradingService.getActiveStrategies()
+        : await tradingService.getStrategies();
       setStrategies(data);
       if (data.length > 0 && !selectedStrategy) {
         setSelectedStrategy(data[0].id);
@@ -48,6 +53,10 @@ const BacktestLab: React.FC = () => {
       console.error('Failed to load strategies:', err);
     }
   };
+
+  useEffect(() => {
+    loadStrategies();
+  }, [showActiveOnly]);
 
   const handleRunBacktest = async () => {
     if (!selectedStrategy) {
@@ -124,9 +133,20 @@ const BacktestLab: React.FC = () => {
         <div className="space-y-6">
           {/* Strategy Selection */}
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">
-              选择策略
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-slate-400">
+                选择策略
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showActiveOnly}
+                  onChange={(e) => setShowActiveOnly(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                />
+                <span className="text-xs text-slate-400">仅显示活跃策略</span>
+              </label>
+            </div>
             <select
               value={selectedStrategy || ''}
               onChange={(e) => setSelectedStrategy(Number(e.target.value))}
@@ -135,10 +155,25 @@ const BacktestLab: React.FC = () => {
               <option value="">-- 选择策略 --</option>
               {strategies.map((strategy) => (
                 <option key={strategy.id} value={strategy.id}>
-                  {strategy.name} {strategy.is_active ? '(激活)' : ''}
+                  {strategy.name} {strategy.is_active ? '✓ 活跃' : '(未激活)'}
                 </option>
               ))}
             </select>
+            {selectedStrategy && (
+              <div className="mt-2 flex items-center gap-2">
+                {strategies.find(s => s.id === selectedStrategy)?.is_active ? (
+                  <span className="text-xs text-emerald-400 flex items-center gap-1">
+                    <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
+                    该策略已激活
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                    <span className="w-2 h-2 bg-slate-600 rounded-full"></span>
+                    该策略未激活
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Stock Pool Selection */}
@@ -181,22 +216,48 @@ const BacktestLab: React.FC = () => {
                     已选择 {manualSymbols.split(',').filter(s => s.trim()).length} 个标的
                   </div>
                 )}
+                <div className="mt-4 border-t border-slate-700 pt-4">
+                  <BacktestSymbolList
+                    selectedListId={null}
+                    onSelectList={(listId, symbols) => {
+                      if (listId && symbols.length > 0) {
+                        setManualSymbols(symbols.join(', '));
+                        setUseManualSymbols(true);
+                      }
+                    }}
+                    currentSymbols={manualSymbols.split(',').map(s => s.trim()).filter(s => s)}
+                  />
+                </div>
               </div>
             ) : (
-              <div>
-                <StockPoolManager
-                  selectedPoolId={selectedPoolId}
-                  onSelectPool={(poolId, symbols) => {
-                    setSelectedPoolId(poolId);
-                    setSelectedSymbols(symbols);
-                  }}
-                  mode="selector"
-                />
-                {selectedSymbols.length > 0 && (
-                  <div className="mt-2 text-sm text-slate-400">
-                    已选择股票池: {selectedSymbols.length} 个标的
-                  </div>
-                )}
+              <div className="space-y-4">
+                <div>
+                  <StockPoolManager
+                    selectedPoolId={selectedPoolId}
+                    onSelectPool={(poolId, symbols) => {
+                      setSelectedPoolId(poolId);
+                      setSelectedSymbols(symbols);
+                    }}
+                    mode="selector"
+                  />
+                  {selectedSymbols.length > 0 && (
+                    <div className="mt-2 text-sm text-slate-400">
+                      已选择股票池: {selectedSymbols.length} 个标的
+                    </div>
+                  )}
+                </div>
+                <div className="border-t border-slate-700 pt-4">
+                  <BacktestSymbolList
+                    selectedListId={null}
+                    onSelectList={(listId, symbols) => {
+                      if (listId && symbols.length > 0) {
+                        setSelectedSymbols(symbols);
+                        setUseManualSymbols(false);
+                      }
+                    }}
+                    currentSymbols={selectedSymbols}
+                  />
+                </div>
               </div>
             )}
           </div>

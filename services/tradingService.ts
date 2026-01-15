@@ -1,5 +1,5 @@
 import { apiClient, ApiError } from './apiClient';
-import { Portfolio, Position, Order, Strategy, MarketQuote, StrategyGenerationRequest, StrategyGenerationResponse, BacktestRequest, BacktestResult } from '../types';
+import { Portfolio, Position, Order, Strategy, MarketQuote, StrategyGenerationRequest, StrategyGenerationResponse, BacktestRequest, BacktestResult, SetStrategyActiveRequest, BatchSetActiveRequest, StrategyUpdate } from '../types';
 
 export class TradingService {
   // Portfolio methods
@@ -43,15 +43,54 @@ export class TradingService {
   }
 
   // Strategy methods
-  async getStrategies(portfolioId?: number): Promise<Strategy[]> {
-    const endpoint = portfolioId 
-      ? `/api/strategies?portfolio_id=${portfolioId}`
-      : '/api/strategies';
+  async getStrategies(portfolioId?: number, isActive?: boolean): Promise<Strategy[]> {
+    const params = new URLSearchParams();
+    if (portfolioId) {
+      params.append('portfolio_id', portfolioId.toString());
+    }
+    if (isActive !== undefined) {
+      params.append('is_active', isActive.toString());
+    }
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/strategies?${queryString}` : '/api/strategies';
     return apiClient.get<Strategy[]>(endpoint);
   }
 
-  async saveStrategy(strategy: Omit<Strategy, 'id' | 'created_at'>): Promise<Strategy> {
+  async getActiveStrategies(portfolioId?: number): Promise<Strategy[]> {
+    const params = new URLSearchParams();
+    if (portfolioId) {
+      params.append('portfolio_id', portfolioId.toString());
+    }
+    const queryString = params.toString();
+    const endpoint = queryString ? `/api/strategies/active?${queryString}` : '/api/strategies/active';
+    return apiClient.get<Strategy[]>(endpoint);
+  }
+
+  async saveStrategy(strategy: Omit<Strategy, 'id' | 'created_at' | 'updated_at'>): Promise<Strategy> {
     return apiClient.post<Strategy>('/api/strategies', strategy);
+  }
+
+  async updateStrategy(strategyId: number, updates: StrategyUpdate): Promise<Strategy> {
+    return apiClient.put<Strategy>(`/api/strategies/${strategyId}`, updates);
+  }
+
+  async deleteStrategy(strategyId: number): Promise<void> {
+    return apiClient.delete(`/api/strategies/${strategyId}`);
+  }
+
+  async setStrategyActive(strategyId: number, isActive: boolean): Promise<Strategy> {
+    return apiClient.put<Strategy>(`/api/strategies/${strategyId}/set-active`, { is_active: isActive });
+  }
+
+  async toggleStrategyActive(strategyId: number): Promise<Strategy> {
+    return apiClient.put<Strategy>(`/api/strategies/${strategyId}/toggle-active`, {});
+  }
+
+  async batchSetStrategyActive(strategyIds: number[], isActive: boolean): Promise<void> {
+    return apiClient.put('/api/strategies/batch-set-active', {
+      strategy_ids: strategyIds,
+      is_active: isActive
+    });
   }
 
   async generateStrategy(request: StrategyGenerationRequest): Promise<StrategyGenerationResponse> {

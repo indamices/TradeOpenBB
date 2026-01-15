@@ -208,3 +208,62 @@ class DataSyncLog(Base):
     status = Column(String(20), nullable=True)  # 'success', 'failed', 'partial'
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Conversation(Base):
+    """Chat conversation session"""
+    __tablename__ = "conversations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(String(255), unique=True, nullable=False, index=True)
+    title = Column(String(255), nullable=True)  # 会话标题（从第一条消息提取）
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    messages = relationship("ConversationMessage", back_populates="conversation", cascade="all, delete-orphan")
+    strategies = relationship("ChatStrategy", back_populates="conversation", cascade="all, delete-orphan")
+
+
+class ConversationMessage(Base):
+    """Individual message in a conversation"""
+    __tablename__ = "conversation_messages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(String(255), ForeignKey("conversations.conversation_id"), nullable=False, index=True)
+    role = Column(String(20), nullable=False)  # 'user' or 'assistant'
+    content = Column(Text, nullable=False)
+    code_snippets = Column(JSON, nullable=True)  # {"python": "code..."}
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    conversation = relationship("Conversation", back_populates="messages")
+
+
+class ChatStrategy(Base):
+    """Strategy extracted from chat conversation"""
+    __tablename__ = "chat_strategies"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(String(255), ForeignKey("conversations.conversation_id"), nullable=True, index=True)
+    message_id = Column(Integer, ForeignKey("conversation_messages.id"), nullable=True)  # 来源消息
+    name = Column(String(255), nullable=False)  # 策略名称（自动提取或用户输入）
+    logic_code = Column(Text, nullable=False)  # 策略代码
+    description = Column(Text, nullable=True)  # 策略描述
+    is_saved = Column(Boolean, default=False)  # 是否已保存到策略池
+    saved_strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=True)  # 关联的策略池ID
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    conversation = relationship("Conversation", back_populates="strategies")
+    saved_strategy = relationship("Strategy", foreign_keys=[saved_strategy_id])
+
+
+class BacktestSymbolList(Base):
+    """Saved symbol lists for backtesting"""
+    __tablename__ = "backtest_symbol_lists"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)  # 清单名称
+    description = Column(Text, nullable=True)  # 描述
+    symbols = Column(JSON, nullable=False)  # List[str]
+    is_active = Column(Boolean, default=True)  # 是否活跃
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
