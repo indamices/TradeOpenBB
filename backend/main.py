@@ -113,6 +113,11 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle all other exceptions"""
+    # #region agent log
+    with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+        import json
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:113","message":"Exception handler triggered","data":{"path":request.url.path,"method":request.method,"exception_type":type(exc).__name__,"exception_msg":str(exc)[:100],"origin":request.headers.get("origin")}})+'\n')
+    # #endregion
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     response = JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -135,12 +140,36 @@ async def general_exception_handler(request: Request, exc: Exception):
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "*"
             response.headers["Access-Control-Allow-Headers"] = "*"
+            # #region agent log
+            with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+                import json
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:138","message":"CORS headers added to exception response","data":{"origin":origin}})+'\n')
+            # #endregion
     return response
 
-# CORS middleware
+# CORS middleware - MUST be added BEFORE RateLimitMiddleware
+# In FastAPI, middleware executes in reverse order (last added = first executed)
+# So we add CORS last so it wraps all responses, but it will execute first
 # Allow local development and cloud platform domains
 # Use allow_origin_regex for pattern matching to support wildcard domains
 import re
+
+# Add a simple middleware to log CORS processing
+@app.middleware("http")
+async def cors_logging_middleware(request: Request, call_next):
+    # #region agent log
+    with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+        import json
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:144","message":"CORS logging middleware entry","data":{"path":request.url.path,"method":request.method,"origin":request.headers.get("origin")}})+'\n')
+    # #endregion
+    response = await call_next(request)
+    # #region agent log
+    with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+        import json
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:150","message":"CORS logging middleware exit","data":{"path":request.url.path,"status_code":response.status_code,"cors_headers":{k:v for k,v in response.headers.items() if 'access-control' in k.lower()}}})+'\n')
+    # #endregion
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -325,6 +354,11 @@ async def generate_strategy_endpoint(request: StrategyGenerationRequest, db: Ses
 @app.post("/api/ai/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
     """AI chat conversation"""
+    # #region agent log
+    with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+        import json
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:354","message":"chat_endpoint called","data":{"path":"/api/ai/chat","message_length":len(request.message)}})+'\n')
+    # #endregion
     try:
         import uuid
         from datetime import datetime
@@ -499,6 +533,11 @@ async def run_backtest_endpoint(request: BacktestRequest, db: Session = Depends(
 @app.get("/api/ai-models", response_model=List[AIModelConfigResponse])
 async def get_ai_models(db: Session = Depends(get_db)):
     """Get all AI model configurations"""
+    # #region agent log
+    with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+        import json
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:499","message":"get_ai_models endpoint called","data":{"path":"/api/ai-models"}})+'\n')
+    # #endregion
     try:
         models = db.query(AIModelConfig).filter(AIModelConfig.is_active == True).all()
         result = []

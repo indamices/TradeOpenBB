@@ -307,7 +307,7 @@ const Dashboard: React.FC = () => {
           <h3 className="text-lg font-semibold text-slate-200 mb-6">多股票价格对比</h3>
           {marketQuotes.length > 0 ? (
             <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minHeight={320}>
                 <BarChart data={multiStockData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis dataKey="symbol" stroke="#64748b" tick={{ fill: '#94a3b8' }} />
@@ -344,7 +344,7 @@ const Dashboard: React.FC = () => {
           </div>
           {indicators.length > 0 ? (
             <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minHeight={320}>
                 <LineChart data={indicators.slice(-30)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis 

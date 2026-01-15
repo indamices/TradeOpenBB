@@ -32,8 +32,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.window_seconds = 60
     
     async def dispatch(self, request: Request, call_next):
-        # Skip rate limiting for health checks
-        if request.url.path == "/" or request.url.path == "/health":
+        # #region agent log
+        with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+            import json
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:34","message":"RateLimitMiddleware dispatch entry","data":{"path":request.url.path,"method":request.method,"origin":request.headers.get("origin"),"client_ip":request.client.host if request.client else "unknown"}})+'\n')
+        # #endregion
+        
+        # Skip rate limiting for health checks and OPTIONS requests
+        if request.url.path == "/" or request.url.path == "/health" or request.method == "OPTIONS":
+            # #region agent log
+            with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+                import json
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"middleware.py:40","message":"Skipping rate limit","data":{"path":request.url.path,"method":request.method}})+'\n')
+            # #endregion
             return await call_next(request)
         
         # Get client IP
@@ -49,18 +60,46 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Check rate limit
         if len(rate_limit_storage[client_ip]) >= self.requests_per_minute:
             logger.warning(f"Rate limit exceeded for {client_ip} on {request.url.path}")
-            return JSONResponse(
+            # #region agent log
+            with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+                import json
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:60","message":"Rate limit exceeded - creating response without CORS","data":{"path":request.url.path,"client_ip":client_ip,"requests_count":len(rate_limit_storage[client_ip])}})+'\n')
+            # #endregion
+            response = JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 content={
                     "detail": f"Rate limit exceeded. Maximum {self.requests_per_minute} requests per minute."
                 }
             )
+            # Add CORS headers to rate limit response
+            origin = request.headers.get("origin")
+            if origin:
+                allowed_origins = ["http://localhost:3000", "http://localhost:5173", "https://tradeopenbb-frontend.onrender.com"]
+                import re
+                origin_pattern = re.compile(r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app")
+                if origin in allowed_origins or origin_pattern.match(origin):
+                    response.headers["Access-Control-Allow-Origin"] = origin
+                    response.headers["Access-Control-Allow-Credentials"] = "true"
+                    response.headers["Access-Control-Allow-Methods"] = "*"
+                    response.headers["Access-Control-Allow-Headers"] = "*"
+            # #region agent log
+            with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+                import json
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:77","message":"Rate limit response with CORS headers","data":{"origin":origin,"cors_added":origin in allowed_origins or (origin and origin_pattern.match(origin)) if origin else False}})+'\n')
+            # #endregion
+            return response
         
         # Add current request
         rate_limit_storage[client_ip].append((current_time, request.url.path))
         
         # Process request
         response = await call_next(request)
+        
+        # #region agent log
+        with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
+            import json
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"middleware.py:90","message":"Response after call_next","data":{"path":request.url.path,"status_code":response.status_code if hasattr(response,'status_code') else None,"cors_headers":{k:v for k,v in response.headers.items() if 'access-control' in k.lower()}}})+'\n')
+        # #endregion
         return response
 
 def get_cache_key(request: Request) -> str:
