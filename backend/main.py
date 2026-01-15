@@ -553,9 +553,13 @@ async def run_backtest_endpoint(request: BacktestRequest, db: Session = Depends(
 async def get_ai_models(db: Session = Depends(get_db)):
     """Get all AI model configurations"""
     # #region agent log
-    with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-        import json
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:499","message":"get_ai_models endpoint called","data":{"path":"/api/ai-models"}})+'\n')
+    try:
+        import os, json
+        log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:551","message":"get_ai_models endpoint called","data":{"path":"/api/ai-models"}})+'\n')
+    except: pass
     # #endregion
     try:
         models = db.query(AIModelConfig).filter(AIModelConfig.is_active == True).all()
