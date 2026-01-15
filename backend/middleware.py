@@ -34,16 +34,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.window_seconds = 60
     
     async def dispatch(self, request: Request, call_next):
-        # #region agent log
-        try:
-            import os, json
-            log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-            os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            with open(log_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:34","message":"RateLimitMiddleware dispatch entry","data":{"path":request.url.path,"method":request.method,"origin":request.headers.get("origin"),"client_ip":request.client.host if request.client else "unknown"}})+'\n')
-        except: pass
-        # #endregion
-        
         # Skip rate limiting for tests (detect pytest or test environment)
         is_testing = (
             "pytest" in sys.modules or 
@@ -54,15 +44,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         
         # Skip rate limiting for health checks, OPTIONS requests, and testing
         if request.url.path == "/" or request.url.path == "/health" or request.method == "OPTIONS" or is_testing:
-            # #region agent log
-            try:
-                import os, json
-                log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-                os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"middleware.py:42","message":"Skipping rate limit","data":{"path":request.url.path,"method":request.method}})+'\n')
-            except: pass
-            # #endregion
             return await call_next(request)
         
         # Get client IP
