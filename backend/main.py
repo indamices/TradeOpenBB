@@ -180,8 +180,9 @@ async def cors_ensuring_middleware(request: Request, call_next):
         try:
             import os, json
             log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
             with open(log_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:168","message":"Handling OPTIONS preflight","data":{"path":request.url.path,"origin":request.headers.get("origin")}})+'\n')
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:178","message":"Handling OPTIONS preflight","data":{"path":request.url.path,"origin":request.headers.get("origin")}})+'\n')
         except: pass
         # #endregion
         origin = request.headers.get("origin")
@@ -200,8 +201,9 @@ async def cors_ensuring_middleware(request: Request, call_next):
                 try:
                     import os, json
                     log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                    os.makedirs(os.path.dirname(log_path), exist_ok=True)
                     with open(log_path, 'a', encoding='utf-8') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:183","message":"OPTIONS response with CORS headers","data":{"origin":origin}})+'\n')
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:203","message":"OPTIONS response with CORS headers","data":{"origin":origin}})+'\n')
                 except: pass
                 # #endregion
         return response
@@ -223,8 +225,9 @@ async def cors_ensuring_middleware(request: Request, call_next):
             try:
                 import os, json
                 log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:198","message":"Added CORS headers to response","data":{"origin":origin,"path":request.url.path}})+'\n')
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:227","message":"Added CORS headers to response","data":{"origin":origin,"path":request.url.path}})+'\n')
             except: pass
             # #endregion
     
@@ -232,9 +235,10 @@ async def cors_ensuring_middleware(request: Request, call_next):
     try:
         import os, json
         log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
         cors_headers = {k:v for k,v in response.headers.items() if 'access-control' in k.lower()}
         with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:207","message":"CORS ensuring middleware exit","data":{"path":request.url.path,"status_code":response.status_code,"cors_headers":cors_headers}})+'\n')
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:236","message":"CORS ensuring middleware exit","data":{"path":request.url.path,"status_code":response.status_code,"cors_headers":cors_headers}})+'\n')
     except: pass
     # #endregion
     return response
