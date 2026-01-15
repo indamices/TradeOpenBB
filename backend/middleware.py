@@ -48,6 +48,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             try:
                 import os, json
                 log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, 'a', encoding='utf-8') as f:
                     f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"middleware.py:42","message":"Skipping rate limit","data":{"path":request.url.path,"method":request.method}})+'\n')
             except: pass
@@ -71,6 +72,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             try:
                 import os, json
                 log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, 'a', encoding='utf-8') as f:
                     f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:62","message":"Rate limit exceeded","data":{"path":request.url.path,"client_ip":client_ip,"requests_count":len(rate_limit_storage[client_ip])}})+'\n')
             except: pass
@@ -97,6 +99,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             try:
                 import os, json
                 log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, 'a', encoding='utf-8') as f:
                     f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:81","message":"Rate limit response with CORS headers","data":{"origin":origin,"cors_added":bool(response.headers.get("Access-Control-Allow-Origin"))}})+'\n')
             except: pass
@@ -113,8 +116,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         try:
             import os, json
             log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            cors_headers = {k:v for k,v in response.headers.items() if 'access-control' in k.lower()}
             with open(log_path, 'a', encoding='utf-8') as f:
-                cors_headers = {k:v for k,v in response.headers.items() if 'access-control' in k.lower()}
                 f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"middleware.py:98","message":"Response after call_next","data":{"path":request.url.path,"status_code":response.status_code if hasattr(response,'status_code') else None,"cors_headers":cors_headers}})+'\n')
         except: pass
         # #endregion
