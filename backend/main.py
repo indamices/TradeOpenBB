@@ -194,9 +194,10 @@ app.add_middleware(
     ],
     allow_origin_regex=r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app",
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods including OPTIONS
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Explicitly list methods
     allow_headers=["*"],
     expose_headers=["*"],
+    max_age=3600,  # Cache preflight for 1 hour
 )
 
 # Initialize database on startup
