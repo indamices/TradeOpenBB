@@ -163,24 +163,78 @@ import re
 
 # Add a simple middleware to log CORS processing
 @app.middleware("http")
-async def cors_logging_middleware(request: Request, call_next):
+async def cors_ensuring_middleware(request: Request, call_next):
     # #region agent log
     try:
         import os, json
         log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:158","message":"CORS logging middleware entry","data":{"path":request.url.path,"method":request.method,"origin":request.headers.get("origin")}})+'\n')
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:157","message":"CORS ensuring middleware entry","data":{"path":request.url.path,"method":request.method,"origin":request.headers.get("origin")}})+'\n')
     except: pass
     # #endregion
+    
+    # Handle OPTIONS preflight explicitly
+    if request.method == "OPTIONS":
+        # #region agent log
+        try:
+            import os, json
+            log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:168","message":"Handling OPTIONS preflight","data":{"path":request.url.path,"origin":request.headers.get("origin")}})+'\n')
+        except: pass
+        # #endregion
+        origin = request.headers.get("origin")
+        response = JSONResponse(content={}, status_code=200)
+        if origin:
+            allowed_origins = ["http://localhost:3000", "http://localhost:5173", "https://tradeopenbb-frontend.onrender.com"]
+            import re
+            origin_pattern = re.compile(r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app")
+            if origin in allowed_origins or origin_pattern.match(origin):
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+                response.headers["Access-Control-Allow-Headers"] = "*"
+                response.headers["Access-Control-Max-Age"] = "3600"
+                # #region agent log
+                try:
+                    import os, json
+                    log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                    with open(log_path, 'a', encoding='utf-8') as f:
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:183","message":"OPTIONS response with CORS headers","data":{"origin":origin}})+'\n')
+                except: pass
+                # #endregion
+        return response
+    
     response = await call_next(request)
+    
+    # Ensure CORS headers are present on all responses
+    origin = request.headers.get("origin")
+    if origin and "Access-Control-Allow-Origin" not in response.headers:
+        allowed_origins = ["http://localhost:3000", "http://localhost:5173", "https://tradeopenbb-frontend.onrender.com"]
+        import re
+        origin_pattern = re.compile(r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app")
+        if origin in allowed_origins or origin_pattern.match(origin):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            # #region agent log
+            try:
+                import os, json
+                log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:198","message":"Added CORS headers to response","data":{"origin":origin,"path":request.url.path}})+'\n')
+            except: pass
+            # #endregion
+    
     # #region agent log
     try:
         import os, json
         log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
         cors_headers = {k:v for k,v in response.headers.items() if 'access-control' in k.lower()}
         with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:165","message":"CORS logging middleware exit","data":{"path":request.url.path,"status_code":response.status_code,"cors_headers":cors_headers}})+'\n')
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:207","message":"CORS ensuring middleware exit","data":{"path":request.url.path,"status_code":response.status_code,"cors_headers":cors_headers}})+'\n')
     except: pass
     # #endregion
     return response
