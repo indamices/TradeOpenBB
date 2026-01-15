@@ -78,15 +78,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Check rate limit
         if len(rate_limit_storage[client_ip]) >= self.requests_per_minute:
             logger.warning(f"Rate limit exceeded for {client_ip} on {request.url.path}")
-            # #region agent log
-            try:
-                import os, json
-                log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-                os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:62","message":"Rate limit exceeded","data":{"path":request.url.path,"client_ip":client_ip,"requests_count":len(rate_limit_storage[client_ip])}})+'\n')
-            except: pass
-            # #endregion
             response = JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 content={
@@ -104,16 +95,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     response.headers["Access-Control-Allow-Credentials"] = "true"
                     response.headers["Access-Control-Allow-Methods"] = "*"
                     response.headers["Access-Control-Allow-Headers"] = "*"
-                    logger.info(f"Added CORS headers for origin: {origin}")
-            # #region agent log
-            try:
-                import os, json
-                log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-                os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:81","message":"Rate limit response with CORS headers","data":{"origin":origin,"cors_added":bool(response.headers.get("Access-Control-Allow-Origin"))}})+'\n')
-            except: pass
-            # #endregion
             return response
         
         # Add current request
@@ -121,17 +102,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         
         # Process request
         response = await call_next(request)
-        
-        # #region agent log
-        try:
-            import os, json
-            log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-            os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            cors_headers = {k:v for k,v in response.headers.items() if 'access-control' in k.lower()}
-            with open(log_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"middleware.py:98","message":"Response after call_next","data":{"path":request.url.path,"status_code":response.status_code if hasattr(response,'status_code') else None,"cors_headers":cors_headers}})+'\n')
-        except: pass
-        # #endregion
         return response
 
 def get_cache_key(request: Request) -> str:

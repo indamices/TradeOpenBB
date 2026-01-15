@@ -115,17 +115,6 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle all other exceptions"""
-    # #region agent log
-    try:
-        import os, json
-        log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:113","message":"Exception handler triggered","data":{"path":request.url.path,"method":request.method,"exception_type":type(exc).__name__,"exception_msg":str(exc)[:100],"origin":request.headers.get("origin")}})+'\n')
-    except Exception as log_exc:
-        # Don't fail if logging fails - just log to stderr
-        logger.error(f"Failed to write debug log: {log_exc}")
-    # #endregion
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     response = JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -148,16 +137,6 @@ async def general_exception_handler(request: Request, exc: Exception):
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "*"
             response.headers["Access-Control-Allow-Headers"] = "*"
-            # #region agent log
-            try:
-                import os, json
-                log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-                os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:148","message":"CORS headers added to exception response","data":{"origin":origin}})+'\n')
-            except Exception as log_exc:
-                logger.error(f"Failed to write debug log: {log_exc}")
-            # #endregion
     return response
 
 # CORS middleware - MUST be added BEFORE RateLimitMiddleware
@@ -167,30 +146,11 @@ async def general_exception_handler(request: Request, exc: Exception):
 # Use allow_origin_regex for pattern matching to support wildcard domains
 import re
 
-# Add a simple middleware to log CORS processing
+# CORS ensuring middleware - handles OPTIONS and ensures CORS headers on all responses
 @app.middleware("http")
 async def cors_ensuring_middleware(request: Request, call_next):
-    # #region agent log
-    try:
-        import os, json
-        log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:157","message":"CORS ensuring middleware entry","data":{"path":request.url.path,"method":request.method,"origin":request.headers.get("origin")}})+'\n')
-    except: pass
-    # #endregion
-    
     # Handle OPTIONS preflight explicitly
     if request.method == "OPTIONS":
-        # #region agent log
-        try:
-            import os, json
-            log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-            os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            with open(log_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:178","message":"Handling OPTIONS preflight","data":{"path":request.url.path,"origin":request.headers.get("origin")}})+'\n')
-        except: pass
-        # #endregion
         origin = request.headers.get("origin")
         response = JSONResponse(content={}, status_code=200)
         if origin:
@@ -203,15 +163,6 @@ async def cors_ensuring_middleware(request: Request, call_next):
                 response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
                 response.headers["Access-Control-Allow-Headers"] = "*"
                 response.headers["Access-Control-Max-Age"] = "3600"
-                # #region agent log
-                try:
-                    import os, json
-                    log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-                    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                    with open(log_path, 'a', encoding='utf-8') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:203","message":"OPTIONS response with CORS headers","data":{"origin":origin}})+'\n')
-                except: pass
-                # #endregion
         return response
     
     response = await call_next(request)
@@ -227,26 +178,7 @@ async def cors_ensuring_middleware(request: Request, call_next):
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
             response.headers["Access-Control-Allow-Headers"] = "*"
-            # #region agent log
-            try:
-                import os, json
-                log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-                os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:227","message":"Added CORS headers to response","data":{"origin":origin,"path":request.url.path}})+'\n')
-            except: pass
-            # #endregion
     
-    # #region agent log
-    try:
-        import os, json
-        log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        cors_headers = {k:v for k,v in response.headers.items() if 'access-control' in k.lower()}
-        with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:236","message":"CORS ensuring middleware exit","data":{"path":request.url.path,"status_code":response.status_code,"cors_headers":cors_headers}})+'\n')
-    except: pass
-    # #endregion
     return response
 
 app.add_middleware(
