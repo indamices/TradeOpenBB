@@ -7,13 +7,16 @@ from cachetools import TTLCache
 
 logger = logging.getLogger(__name__)
 
-# Cache for market data (10 second TTL to reduce API calls and rate limiting)
-quote_cache = TTLCache(maxsize=500, ttl=10)
-data_cache = TTLCache(maxsize=200, ttl=60)  # Historical data cached longer
+# Cache for market data (使用保守配置以减少API调用)
+# 注意：这些缓存已被新的 CacheService 和 RateLimiter 取代
+# 保留以兼容旧代码，但建议迁移到新服务
+quote_cache = TTLCache(maxsize=500, ttl=60)  # 更新为60秒（1分钟）
+data_cache = TTLCache(maxsize=200, ttl=86400)  # 更新为24小时
 
 # Rate limiting: track last request time per symbol
+# 注意：这些已被新的 RateLimiter 取代，保留以兼容
 _last_request_time = {}
-_min_request_interval = 0.5  # Minimum 0.5 seconds between requests for same symbol
+_min_request_interval = 12.0  # 更新为12秒（免费版：每分钟5次）
 
 # Try to import OpenBB, but make it optional
 try:

@@ -75,6 +75,28 @@ class BaseAIProvider(ABC):
         """
         pass
     
+    async def chat(self, message: str, conversation_history: list = None) -> str:
+        """
+        Chat with AI (for general conversation, not strategy generation)
+        
+        Args:
+            message: User's message
+            conversation_history: List of previous messages in format [{"role": "user/assistant", "content": "..."}]
+        
+        Returns:
+            AI's response as plain text
+        """
+        # Default implementation - can be overridden by providers
+        # For now, use generate_strategy but extract just the explanation
+        result = await self.generate_strategy(message)
+        return result.get("explanation", result.get("code", ""))
+    
     def get_system_instruction(self) -> str:
         """Get system instruction for strategy generation"""
         return SYSTEM_INSTRUCTION_TEMPLATE
+    
+    def get_chat_system_instruction(self) -> str:
+        """Get system instruction for chat (more conversational)"""
+        return """You are a helpful AI assistant specialized in algorithmic trading and quantitative finance. 
+You help users understand trading strategies, explain market concepts, and provide guidance on strategy development.
+Be conversational, clear, and helpful. When users ask about strategies, you can provide code examples when appropriate."""

@@ -10,13 +10,18 @@ import {
 import { Strategy, BacktestRequest, BacktestResult } from '../types';
 import { tradingService } from '../services/tradingService';
 import { ApiError } from '../services/apiClient';
+import StockPoolManager from './StockPoolManager';
+import TimeRangeSelector from './TimeRangeSelector';
 
 const BacktestLab: React.FC = () => {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState<number | null>(null);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
-  const [symbols, setSymbols] = useState<string>('AAPL,MSFT,GOOGL');
+  const [selectedPoolId, setSelectedPoolId] = useState<number | null>(null);
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
+  const [manualSymbols, setManualSymbols] = useState<string>('AAPL,MSFT,GOOGL');
+  const [useManualSymbols, setUseManualSymbols] = useState<boolean>(true);
   const [initialCash, setInitialCash] = useState<number>(100000);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
@@ -55,9 +60,13 @@ const BacktestLab: React.FC = () => {
       return;
     }
 
-    const symbolList = symbols.split(',').map(s => s.trim()).filter(s => s);
+    // Get symbols from pool or manual input
+    const symbolList = useManualSymbols 
+      ? manualSymbols.split(',').map(s => s.trim()).filter(s => s)
+      : selectedSymbols;
+    
     if (symbolList.length === 0) {
-      setError('Please enter at least one symbol');
+      setError('Please select a stock pool or enter at least one symbol');
       return;
     }
 
@@ -112,7 +121,7 @@ const BacktestLab: React.FC = () => {
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 className="text-lg font-semibold text-slate-200 mb-4">回测配置</h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-6">
           {/* Strategy Selection */}
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-2">
@@ -132,43 +141,75 @@ const BacktestLab: React.FC = () => {
             </select>
           </div>
 
-          {/* Symbols */}
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">
-              交易标的 (逗号分隔)
-            </label>
-            <input
-              type="text"
-              value={symbols}
-              onChange={(e) => setSymbols(e.target.value)}
-              placeholder="AAPL,MSFT,GOOGL"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          {/* Stock Pool Selection */}
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-800/50">
+            <div className="flex items-center gap-4 mb-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  checked={!useManualSymbols}
+                  onChange={() => setUseManualSymbols(false)}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="text-sm font-medium text-slate-300">使用股票池</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  checked={useManualSymbols}
+                  onChange={() => setUseManualSymbols(true)}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="text-sm font-medium text-slate-300">手动输入</span>
+              </label>
+            </div>
+
+            {useManualSymbols ? (
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-2">
+                  交易标的 (逗号分隔)
+                </label>
+                <input
+                  type="text"
+                  value={manualSymbols}
+                  onChange={(e) => setManualSymbols(e.target.value)}
+                  placeholder="AAPL,MSFT,GOOGL"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {manualSymbols.split(',').filter(s => s.trim()).length > 0 && (
+                  <div className="mt-2 text-sm text-slate-400">
+                    已选择 {manualSymbols.split(',').filter(s => s.trim()).length} 个标的
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <StockPoolManager
+                  selectedPoolId={selectedPoolId}
+                  onSelectPool={(poolId, symbols) => {
+                    setSelectedPoolId(poolId);
+                    setSelectedSymbols(symbols);
+                  }}
+                  mode="selector"
+                />
+                {selectedSymbols.length > 0 && (
+                  <div className="mt-2 text-sm text-slate-400">
+                    已选择股票池: {selectedSymbols.length} 个标的
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Start Date */}
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">
-              开始日期
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* End Date */}
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">
-              结束日期
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          {/* Time Range Selection */}
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-800/50">
+            <TimeRangeSelector
+              startDate={startDate}
+              endDate={endDate}
+              onChange={(start, end) => {
+                setStartDate(start);
+                setEndDate(end);
+              }}
             />
           </div>
 

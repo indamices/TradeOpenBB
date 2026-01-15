@@ -147,3 +147,44 @@ export interface ChatConversation {
   conversation_id: string;
   messages: ChatMessage[];
 }
+
+// Stock Pool Types
+export interface StockPool {
+  id: number;
+  name: string;
+  description?: string;
+  symbols: string[];
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface StockPoolCreate {
+  name: string;
+  description?: string;
+  symbols: string[];
+}
+
+export interface StockPoolUpdate {
+  name?: string;
+  description?: string;
+  symbols?: string[];
+}
+
+// Stock Info Types
+export interface StockInfo {
+  symbol: string;
+  name?: string;
+  exchange?: string;
+  sector?: string;
+  industry?: string;
+  market_cap?: number;
+  pe_ratio?: number;
+  updated_at?: string;
+}
+
+// Time Range Types
+export interface TimeRange {
+  start: string;
+  end: string;
+  label?: string;
+}

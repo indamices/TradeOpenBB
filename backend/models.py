@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum, TypeDecorator
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum, TypeDecorator, Date, BigInteger, Index, UniqueConstraint, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
@@ -144,3 +144,67 @@ class AIModelConfig(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class MarketData(Base):
+    """Historical OHLCV market data"""
+    __tablename__ = "market_data"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True)
+    open = Column(Float, nullable=False)
+    high = Column(Float, nullable=False)
+    low = Column(Float, nullable=False)
+    close = Column(Float, nullable=False)
+    volume = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Composite unique index and index for efficient queries
+    __table_args__ = (
+        UniqueConstraint('symbol', 'date', name='uq_symbol_date'),
+        Index('idx_symbol_date', 'symbol', 'date'),
+    )
+
+
+class StockPool(Base):
+    """Stock pool management for backtesting"""
+    __tablename__ = "stock_pools"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    symbols = Column(JSON, nullable=False)  # List[str]
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class StockInfo(Base):
+    """Stock basic information cache"""
+    __tablename__ = "stock_info"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String(20), unique=True, nullable=False, index=True)
+    name = Column(String(255), nullable=True)
+    exchange = Column(String(50), nullable=True)
+    sector = Column(String(100), nullable=True)
+    industry = Column(String(100), nullable=True)
+    market_cap = Column(BigInteger, nullable=True)
+    pe_ratio = Column(Float, nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class DataSyncLog(Base):
+    """Data synchronization log for tracking sync operations"""
+    __tablename__ = "data_sync_log"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    sync_type = Column(String(50), nullable=True)  # 'historical', 'realtime', 'info'
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    records_count = Column(Integer, nullable=True)
+    status = Column(String(20), nullable=True)  # 'success', 'failed', 'partial'
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

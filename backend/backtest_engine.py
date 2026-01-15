@@ -9,10 +9,12 @@ try:
     from .schemas import BacktestRequest, BacktestResult
     from .openbb_service import openbb_service
     from .models import Strategy
+    from .services.data_service import DataService
 except ImportError:
     from schemas import BacktestRequest, BacktestResult
     from openbb_service import openbb_service
     from models import Strategy
+    from services.data_service import DataService
 
 logger = logging.getLogger(__name__)
 
@@ -183,15 +185,37 @@ async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
         # Initialize backtest engine
         engine = BacktestEngine(initial_cash=request.initial_cash)
         
-        # Get historical data for all symbols
+        # Get historical data for all symbols using DataService (with caching)
         all_data: Dict[str, pd.DataFrame] = {}
-        for symbol in request.symbols:
-            try:
-                data = openbb_service.get_stock_data(symbol, request.start_date, request.end_date)
-                all_data[symbol] = data
-            except Exception as e:
-                logger.warning(f"Failed to load data for {symbol}: {str(e)}")
-                continue
+        try:
+            from .database import SessionLocal
+            db = SessionLocal()
+        except ImportError:
+            from database import SessionLocal
+            db = SessionLocal()
+        
+        try:
+            async with DataService(db=db) as data_service:
+                # Batch fetch data with rate limiting
+                data_dict = await data_service.batch_fetch_historical_data(
+                    symbols=request.symbols,
+                    start_date=request.start_date,
+                    end_date=request.end_date
+                )
+                all_data = data_dict
+        except Exception as e:
+            logger.error(f"Failed to fetch data using DataService: {e}, falling back to openbb_service")
+            # Fallback to direct API calls
+            for symbol in request.symbols:
+                try:
+                    data = openbb_service.get_stock_data(symbol, request.start_date, request.end_date)
+                    all_data[symbol] = data
+                except Exception as e2:
+                    logger.warning(f"Failed to load data for {symbol}: {str(e2)}")
+                    continue
+        finally:
+            if db:
+                db.close()
         
         if not all_data:
             raise ValueError("No data available for backtesting")

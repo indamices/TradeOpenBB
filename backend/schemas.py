@@ -211,6 +211,70 @@ class ChatResponse(BaseModel):
     suggestions: Optional[List[str]] = None
     code_snippets: Optional[Dict[str, str]] = None
 
+# Stock Pool Schemas
+class StockPoolBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    symbols: List[str] = Field(..., min_items=1)
+    
+    @validator('symbols')
+    def validate_symbols(cls, v):
+        if not v:
+            raise ValueError('Symbols list cannot be empty')
+        # Normalize symbols to uppercase
+        return [s.upper().strip() for s in v if s.strip()]
+
+class StockPoolCreate(StockPoolBase):
+    pass
+
+class StockPoolUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    symbols: Optional[List[str]] = None
+    
+    @validator('symbols')
+    def validate_symbols(cls, v):
+        if v is not None:
+            if not v:
+                raise ValueError('Symbols list cannot be empty')
+            return [s.upper().strip() for s in v if s.strip()]
+        return v
+
+class StockPool(StockPoolBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+# Stock Info Schemas
+class StockInfo(BaseModel):
+    symbol: str
+    name: Optional[str] = None
+    exchange: Optional[str] = None
+    sector: Optional[str] = None
+    industry: Optional[str] = None
+    market_cap: Optional[int] = None
+    pe_ratio: Optional[float] = None
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+# Data Sync Schemas
+class DataSyncRequest(BaseModel):
+    symbols: List[str] = Field(..., min_items=1)
+    start_date: str  # ISO format date
+    end_date: str  # ISO format date
+    sync_type: str = "historical"  # 'historical', 'realtime', 'info'
+
+class DataSyncResponse(BaseModel):
+    success: bool
+    message: str
+    symbols_processed: int
+    records_added: int
+
 # Backtest Schemas
 class BacktestRequest(BaseModel):
     strategy_id: int

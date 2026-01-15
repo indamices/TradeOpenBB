@@ -25,3 +25,5 @@ psycopg2-binary
 openai  # Required for OpenAI models
 # anthropic  # Uncomment if using Claude
 # google-genai  # Uncomment if using Gemini
+# Task scheduler for background jobs
+apscheduler  # Optional, for scheduled data sync tasks

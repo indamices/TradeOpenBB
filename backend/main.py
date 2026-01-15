@@ -19,7 +19,7 @@ import time
 
 # Use absolute imports for Docker deployment
 from database import get_db, init_db
-from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base
+from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base, StockPool, StockInfo
 from schemas import (
     Portfolio as PortfolioSchema, PortfolioCreate, PortfolioUpdate,
     Position as PositionSchema, PositionCreate, PositionUpdate,
@@ -27,7 +27,9 @@ from schemas import (
     Strategy as StrategySchema, StrategyCreate, StrategyUpdate,
     MarketQuote, StrategyGenerationRequest, StrategyGenerationResponse,
     AIModelConfigCreate, AIModelConfigUpdate, AIModelConfigResponse,
-    BacktestRequest, BacktestResult, ChatRequest, ChatResponse
+    BacktestRequest, BacktestResult, ChatRequest, ChatResponse,
+    StockPool as StockPoolSchema, StockPoolCreate, StockPoolUpdate,
+    StockInfo as StockInfoSchema, DataSyncRequest, DataSyncResponse
 )
 from market_service import get_realtime_quote, get_multiple_quotes, get_market_overview, get_technical_indicators
 from ai_service_factory import generate_strategy, chat_with_ai
@@ -156,6 +158,23 @@ app.add_middleware(
 # Initialize database on startup
 @app.on_event("startup")
 async def startup_event():
+    # Start task scheduler for background data sync
+    try:
+        from services.scheduler import scheduler
+        scheduler.start()
+        logger.info("Task scheduler started successfully")
+    except Exception as e:
+        logger.warning(f"Failed to start task scheduler: {e}. Scheduled tasks will be disabled.")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown event handler"""
+    try:
+        from services.scheduler import scheduler
+        scheduler.stop()
+        logger.info("Task scheduler stopped")
+    except Exception:
+        pass
     try:
         # Ensure data directory exists for SQLite
         import os
@@ -672,3 +691,140 @@ async def set_default_ai_model(model_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_model)
     return db_model
+
+# Stock Pool endpoints
+@app.get("/api/stock-pools", response_model=List[StockPoolSchema])
+async def get_stock_pools(db: Session = Depends(get_db)):
+    """Get all stock pools"""
+    pools = db.query(StockPool).order_by(StockPool.created_at.desc()).all()
+    return pools
+
+@app.get("/api/stock-pools/{pool_id}", response_model=StockPoolSchema)
+async def get_stock_pool(pool_id: int, db: Session = Depends(get_db)):
+    """Get a specific stock pool"""
+    pool = db.query(StockPool).filter(StockPool.id == pool_id).first()
+    if not pool:
+        raise HTTPException(status_code=404, detail="Stock pool not found")
+    return pool
+
+@app.post("/api/stock-pools", response_model=StockPoolSchema, status_code=status.HTTP_201_CREATED)
+async def create_stock_pool(pool: StockPoolCreate, db: Session = Depends(get_db)):
+    """Create a new stock pool"""
+    db_pool = StockPool(**pool.dict())
+    db.add(db_pool)
+    db.commit()
+    db.refresh(db_pool)
+    return db_pool
+
+@app.put("/api/stock-pools/{pool_id}", response_model=StockPoolSchema)
+async def update_stock_pool(pool_id: int, pool: StockPoolUpdate, db: Session = Depends(get_db)):
+    """Update a stock pool"""
+    db_pool = db.query(StockPool).filter(StockPool.id == pool_id).first()
+    if not db_pool:
+        raise HTTPException(status_code=404, detail="Stock pool not found")
+    
+    update_data = pool.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_pool, field, value)
+    
+    db.commit()
+    db.refresh(db_pool)
+    return db_pool
+
+@app.delete("/api/stock-pools/{pool_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_stock_pool(pool_id: int, db: Session = Depends(get_db)):
+    """Delete a stock pool"""
+    db_pool = db.query(StockPool).filter(StockPool.id == pool_id).first()
+    if not db_pool:
+        raise HTTPException(status_code=404, detail="Stock pool not found")
+    
+    db.delete(db_pool)
+    db.commit()
+    return None
+
+# Stock search endpoints
+@app.get("/api/market/stocks/search")
+async def search_stocks(q: str = "", limit: int = 50, db: Session = Depends(get_db)):
+    """Search stocks (from database cache)"""
+    query = db.query(StockInfo)
+    
+    if q:
+        # Search by symbol or name
+        search_term = f"%{q.upper()}%"
+        query = query.filter(
+            (StockInfo.symbol.like(search_term)) |
+            (StockInfo.name.like(search_term))
+        )
+    
+    stocks = query.limit(limit).all()
+    
+    # If not found in database, return empty list (frontend can fallback to API)
+    return [StockInfoSchema.from_orm(s) for s in stocks]
+
+@app.get("/api/market/stocks/{symbol}/info", response_model=StockInfoSchema)
+async def get_stock_info(symbol: str, db: Session = Depends(get_db)):
+    """Get stock detailed information"""
+    stock = db.query(StockInfo).filter(StockInfo.symbol == symbol.upper()).first()
+    if not stock:
+        raise HTTPException(status_code=404, detail="Stock info not found")
+    return stock
+
+# Data sync endpoints (admin)
+@app.post("/api/admin/sync-data", response_model=DataSyncResponse)
+async def trigger_data_sync(request: DataSyncRequest, db: Session = Depends(get_db)):
+    """Manually trigger data synchronization (admin)"""
+    from services.data_service import DataService
+    
+    try:
+        records_added = 0
+        symbols_processed = 0
+        
+        async with DataService(db=db) as data_service:
+            for symbol in request.symbols:
+                try:
+                    data = await data_service.get_historical_data(
+                        symbol=symbol,
+                        start_date=request.start_date,
+                        end_date=request.end_date,
+                        use_cache=False  # Force fetch from API
+                    )
+                    
+                    if data is not None and not data.empty:
+                        records_added += len(data)
+                        symbols_processed += 1
+                except Exception as e:
+                    logger.error(f"Failed to sync {symbol}: {e}")
+                    continue
+        
+        return DataSyncResponse(
+            success=True,
+            message=f"Synced {symbols_processed} symbols, added {records_added} records",
+            symbols_processed=symbols_processed,
+            records_added=records_added
+        )
+    except Exception as e:
+        logger.error(f"Data sync failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Data sync failed: {str(e)}")
+
+# Rate limit monitoring endpoints (admin)
+@app.get("/api/admin/rate-limit-status")
+async def get_rate_limit_status():
+    """Get rate limit status (admin monitoring)"""
+    try:
+        from services.rate_limiter import rate_limiter
+        status = rate_limiter.get_status()
+        return status
+    except Exception as e:
+        logger.error(f"Failed to get rate limit status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get rate limit status: {str(e)}")
+
+@app.post("/api/admin/reset-daily-limit")
+async def reset_daily_limit():
+    """Reset daily request count (admin, emergency use only)"""
+    try:
+        from services.rate_limiter import rate_limiter
+        rate_limiter.reset_daily_count()
+        return {"message": "Daily limit reset successfully", "status": "ok"}
+    except Exception as e:
+        logger.error(f"Failed to reset daily limit: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reset daily limit: {str(e)}")
