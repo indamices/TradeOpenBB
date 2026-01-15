@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Loader2, Code, Lightbulb, MessageSquare, User, History, Trash2, Plus, Sparkles, Save, X, Power, PowerOff, FileText, Extract } from 'lucide-react';
+import { Send, Loader2, Code, Lightbulb, MessageSquare, User, History, Trash2, Plus, Sparkles, Save, X, Power, PowerOff, FileText, Scissors } from 'lucide-react';
 import { ChatMessage, ChatRequest, ChatResponse, Conversation, ChatStrategy } from '../types';
 import { apiClient } from '../services/apiClient';
 import { chatService } from '../services/chatService';
@@ -390,7 +390,7 @@ const AIChatAssistant: React.FC = () => {
                                 onClick={() => handleExtractStrategy(idx)}
                                 className="text-xs px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded flex items-center gap-1 transition"
                               >
-                                <Extract size={12} /> 提取策略
+                                <Scissors size={12} /> 提取策略
                               </button>
                             )}
                           </div>
