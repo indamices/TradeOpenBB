@@ -36,9 +36,13 @@ services:
         # 3. Use External Connection String from tradeopenbb-db -> Connections
         # 4. Format: postgresql://user:password@dpg-xxxxx-a.oregon-postgres.render.com/dbname
       
-      # Encryption key for API keys (auto-generated, or set manually)
+      # Encryption key for API keys (手动在 Render Dashboard 中设置)
+      # 注意：这个密钥用于加密/解密所有模型的 API keys
+      # 必须设置为固定值，否则每次部署都会导致 API keys 失效
+      # 生成密钥命令：python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      # 或者在本地运行：python generate_encryption_key.py
       - key: ENCRYPTION_KEY
-        generateValue: true
+        sync: false  # 手动在 Render Dashboard 中设置固定值
       
       # API keys (set manually in Render Dashboard)
       - key: API_KEY
