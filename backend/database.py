@@ -79,9 +79,10 @@ def init_db():
         Portfolio = models.Portfolio
     except ImportError:
         from models import Base, Portfolio
-        Base.metadata.create_all(bind=engine)
-    else:
-        Base.metadata.create_all(bind=engine)
+    
+    # Create all tables (including new ones)
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created/updated successfully")
     
     # Create default portfolio with id=1 if it doesn't exist
     db = SessionLocal()

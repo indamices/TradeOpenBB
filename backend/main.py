@@ -267,6 +267,15 @@ app.add_middleware(
 # Initialize database on startup
 @app.on_event("startup")
 async def startup_event():
+    # Initialize database first
+    try:
+        from database import init_db
+        init_db()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}", exc_info=True)
+        raise
+    
     # Start task scheduler for background data sync
     try:
         from services.scheduler import scheduler
@@ -285,14 +294,8 @@ async def shutdown_event():
     except Exception:
         pass
     try:
-        # Ensure data directory exists for SQLite
-        import os
-        data_dir = os.path.join(os.getcwd(), "data")
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir, exist_ok=True)
-        
-        init_db()
-        logger.info("Database initialized successfully")
+        # Cleanup on shutdown
+        logger.info("Application shutting down")
         
         # Verify default portfolio exists
         db = next(get_db())
