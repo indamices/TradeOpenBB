@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 import logging
+import math
 
 try:
     from .schemas import BacktestRequest, BacktestResult
@@ -155,14 +156,22 @@ class BacktestEngine:
         else:
             win_rate = 0.0
         
+        # Helper function to sanitize float values for JSON
+        def sanitize_float(val):
+            if isinstance(val, (float, np.floating)):
+                if math.isnan(val) or math.isinf(val):
+                    return 0.0
+                return float(val)
+            return val
+        
         return {
-            'sharpe_ratio': float(sharpe_ratio),
-            'sortino_ratio': float(sortino_ratio),
-            'annualized_return': float(annualized_return),
-            'max_drawdown': float(max_drawdown),
-            'win_rate': float(win_rate),
+            'sharpe_ratio': sanitize_float(sharpe_ratio),
+            'sortino_ratio': sanitize_float(sortino_ratio),
+            'annualized_return': sanitize_float(annualized_return),
+            'max_drawdown': sanitize_float(max_drawdown),
+            'win_rate': sanitize_float(win_rate),
             'total_trades': len(self.trades),
-            'total_return': float(total_return)
+            'total_return': sanitize_float(total_return)
         }
 
 async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:

@@ -37,6 +37,8 @@ def test_update_ai_model(client, sample_ai_model_data):
     """Test updating an AI model"""
     # Create model
     create_response = client.post("/api/ai-models", json=sample_ai_model_data)
+    assert create_response.status_code in [200, 201], f"Expected 200/201, got {create_response.status_code}: {create_response.text}"
+    assert "id" in create_response.json(), f"Response missing 'id': {create_response.text}"
     model_id = create_response.json()["id"]
     
     # Update model
@@ -50,6 +52,8 @@ def test_delete_ai_model(client, sample_ai_model_data):
     """Test deleting an AI model"""
     # Create model
     create_response = client.post("/api/ai-models", json=sample_ai_model_data)
+    assert create_response.status_code in [200, 201], f"Expected 200/201, got {create_response.status_code}: {create_response.text}"
+    assert "id" in create_response.json(), f"Response missing 'id': {create_response.text}"
     model_id = create_response.json()["id"]
     
     # Delete model
@@ -64,6 +68,8 @@ def test_set_default_ai_model(client, sample_ai_model_data):
     """Test setting default AI model"""
     # Create model
     create_response = client.post("/api/ai-models", json=sample_ai_model_data)
+    assert create_response.status_code in [200, 201], f"Expected 200/201, got {create_response.status_code}: {create_response.text}"
+    assert "id" in create_response.json(), f"Response missing 'id': {create_response.text}"
     model_id = create_response.json()["id"]
     
     # Set as default

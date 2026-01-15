@@ -32,6 +32,7 @@ def test_bulk_order_creation(client, sample_order_data):
     # First create a portfolio
     portfolio_data = {"name": "Test", "initial_cash": 100000.0}
     portfolio_resp = client.post("/api/portfolio", json=portfolio_data)
+    assert portfolio_resp.status_code in [200, 201], f"Expected 200/201, got {portfolio_resp.status_code}: {portfolio_resp.text}"
     portfolio_id = portfolio_resp.json()["id"]
     
     start_time = time.time()
@@ -91,6 +92,7 @@ def test_large_response_handling(client):
     # Create many orders
     portfolio_data = {"name": "Test", "initial_cash": 100000.0}
     portfolio_resp = client.post("/api/portfolio", json=portfolio_data)
+    assert portfolio_resp.status_code in [200, 201], f"Expected 200/201, got {portfolio_resp.status_code}: {portfolio_resp.text}"
     portfolio_id = portfolio_resp.json()["id"]
     
     # Create 100 orders

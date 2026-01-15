@@ -9,6 +9,7 @@ def test_portfolio_workflow(client, sample_portfolio_data):
     # Create portfolio
     create_response = client.post("/api/portfolio", json=sample_portfolio_data)
     assert create_response.status_code == status.HTTP_201_CREATED
+    assert "id" in create_response.json(), f"Response missing 'id': {create_response.text}"
     portfolio_id = create_response.json()["id"]
     
     # Create position
@@ -53,6 +54,7 @@ def test_strategy_workflow(client, sample_strategy_data):
     # Create strategy
     create_response = client.post("/api/strategies", json=sample_strategy_data)
     assert create_response.status_code == status.HTTP_201_CREATED
+    assert "id" in create_response.json(), f"Response missing 'id': {create_response.text}"
     strategy_id = create_response.json()["id"]
     
     # Get all strategies
@@ -66,6 +68,7 @@ def test_ai_model_workflow(client, sample_ai_model_data):
     # Create model
     create_response = client.post("/api/ai-models", json=sample_ai_model_data)
     assert create_response.status_code == status.HTTP_201_CREATED
+    assert "id" in create_response.json(), f"Response missing 'id': {create_response.text}"
     model_id = create_response.json()["id"]
     
     # Set as default

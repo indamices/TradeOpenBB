@@ -24,6 +24,8 @@ def test_get_portfolio(client, sample_portfolio_data):
     """Test getting a portfolio"""
     # Create portfolio first
     create_response = client.post("/api/portfolio", json=sample_portfolio_data)
+    assert create_response.status_code in [200, 201], f"Expected 200/201, got {create_response.status_code}: {create_response.text}"
+    assert "id" in create_response.json(), f"Response missing 'id': {create_response.text}"
     portfolio_id = create_response.json()["id"]
     
     # Get portfolio
@@ -42,6 +44,8 @@ def test_update_portfolio(client, sample_portfolio_data):
     """Test updating a portfolio"""
     # Create portfolio
     create_response = client.post("/api/portfolio", json=sample_portfolio_data)
+    assert create_response.status_code in [200, 201], f"Expected 200/201, got {create_response.status_code}: {create_response.text}"
+    assert "id" in create_response.json(), f"Response missing 'id': {create_response.text}"
     portfolio_id = create_response.json()["id"]
     
     # Update portfolio
