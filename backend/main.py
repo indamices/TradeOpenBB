@@ -114,9 +114,13 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle all other exceptions"""
     # #region agent log
-    with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-        import json
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:113","message":"Exception handler triggered","data":{"path":request.url.path,"method":request.method,"exception_type":type(exc).__name__,"exception_msg":str(exc)[:100],"origin":request.headers.get("origin")}})+'\n')
+    try:
+        import os, json
+        log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:113","message":"Exception handler triggered","data":{"path":request.url.path,"method":request.method,"exception_type":type(exc).__name__,"exception_msg":str(exc)[:100],"origin":request.headers.get("origin")}})+'\n')
+    except: pass
     # #endregion
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     response = JSONResponse(
@@ -141,9 +145,12 @@ async def general_exception_handler(request: Request, exc: Exception):
             response.headers["Access-Control-Allow-Methods"] = "*"
             response.headers["Access-Control-Allow-Headers"] = "*"
             # #region agent log
-            with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-                import json
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:138","message":"CORS headers added to exception response","data":{"origin":origin}})+'\n')
+            try:
+                import os, json
+                log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:148","message":"CORS headers added to exception response","data":{"origin":origin}})+'\n')
+            except: pass
             # #endregion
     return response
 
@@ -158,15 +165,23 @@ import re
 @app.middleware("http")
 async def cors_logging_middleware(request: Request, call_next):
     # #region agent log
-    with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-        import json
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:144","message":"CORS logging middleware entry","data":{"path":request.url.path,"method":request.method,"origin":request.headers.get("origin")}})+'\n')
+    try:
+        import os, json
+        log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:158","message":"CORS logging middleware entry","data":{"path":request.url.path,"method":request.method,"origin":request.headers.get("origin")}})+'\n')
+    except: pass
     # #endregion
     response = await call_next(request)
     # #region agent log
-    with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-        import json
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:150","message":"CORS logging middleware exit","data":{"path":request.url.path,"status_code":response.status_code,"cors_headers":{k:v for k,v in response.headers.items() if 'access-control' in k.lower()}}})+'\n')
+    try:
+        import os, json
+        log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+        cors_headers = {k:v for k,v in response.headers.items() if 'access-control' in k.lower()}
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:165","message":"CORS logging middleware exit","data":{"path":request.url.path,"status_code":response.status_code,"cors_headers":cors_headers}})+'\n')
+    except: pass
     # #endregion
     return response
 
@@ -355,9 +370,13 @@ async def generate_strategy_endpoint(request: StrategyGenerationRequest, db: Ses
 async def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
     """AI chat conversation"""
     # #region agent log
-    with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-        import json
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:354","message":"chat_endpoint called","data":{"path":"/api/ai/chat","message_length":len(request.message)}})+'\n')
+    try:
+        import os, json
+        log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:354","message":"chat_endpoint called","data":{"path":"/api/ai/chat","message_length":len(request.message)}})+'\n')
+    except: pass
     # #endregion
     try:
         import uuid

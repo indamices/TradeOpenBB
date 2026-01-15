@@ -33,17 +33,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     
     async def dispatch(self, request: Request, call_next):
         # #region agent log
-        with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-            import json
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:34","message":"RateLimitMiddleware dispatch entry","data":{"path":request.url.path,"method":request.method,"origin":request.headers.get("origin"),"client_ip":request.client.host if request.client else "unknown"}})+'\n')
+        try:
+            import os, json
+            log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:34","message":"RateLimitMiddleware dispatch entry","data":{"path":request.url.path,"method":request.method,"origin":request.headers.get("origin"),"client_ip":request.client.host if request.client else "unknown"}})+'\n')
+        except: pass
         # #endregion
         
         # Skip rate limiting for health checks and OPTIONS requests
         if request.url.path == "/" or request.url.path == "/health" or request.method == "OPTIONS":
             # #region agent log
-            with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-                import json
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"middleware.py:40","message":"Skipping rate limit","data":{"path":request.url.path,"method":request.method}})+'\n')
+            try:
+                import os, json
+                log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"middleware.py:42","message":"Skipping rate limit","data":{"path":request.url.path,"method":request.method}})+'\n')
+            except: pass
             # #endregion
             return await call_next(request)
         
@@ -61,9 +68,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if len(rate_limit_storage[client_ip]) >= self.requests_per_minute:
             logger.warning(f"Rate limit exceeded for {client_ip} on {request.url.path}")
             # #region agent log
-            with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-                import json
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:60","message":"Rate limit exceeded - creating response without CORS","data":{"path":request.url.path,"client_ip":client_ip,"requests_count":len(rate_limit_storage[client_ip])}})+'\n')
+            try:
+                import os, json
+                log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:62","message":"Rate limit exceeded","data":{"path":request.url.path,"client_ip":client_ip,"requests_count":len(rate_limit_storage[client_ip])}})+'\n')
+            except: pass
             # #endregion
             response = JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -71,7 +81,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "detail": f"Rate limit exceeded. Maximum {self.requests_per_minute} requests per minute."
                 }
             )
-            # Add CORS headers to rate limit response
+            # Add CORS headers to rate limit response (CRITICAL: without this, CORS errors occur)
             origin = request.headers.get("origin")
             if origin:
                 allowed_origins = ["http://localhost:3000", "http://localhost:5173", "https://tradeopenbb-frontend.onrender.com"]
@@ -82,10 +92,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     response.headers["Access-Control-Allow-Credentials"] = "true"
                     response.headers["Access-Control-Allow-Methods"] = "*"
                     response.headers["Access-Control-Allow-Headers"] = "*"
+                    logger.info(f"Added CORS headers for origin: {origin}")
             # #region agent log
-            with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-                import json
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:77","message":"Rate limit response with CORS headers","data":{"origin":origin,"cors_added":origin in allowed_origins or (origin and origin_pattern.match(origin)) if origin else False}})+'\n')
+            try:
+                import os, json
+                log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"middleware.py:81","message":"Rate limit response with CORS headers","data":{"origin":origin,"cors_added":bool(response.headers.get("Access-Control-Allow-Origin"))}})+'\n')
+            except: pass
             # #endregion
             return response
         
@@ -96,9 +110,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         
         # #region agent log
-        with open('.cursor/debug.log', 'a', encoding='utf-8') as f:
-            import json
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"middleware.py:90","message":"Response after call_next","data":{"path":request.url.path,"status_code":response.status_code if hasattr(response,'status_code') else None,"cors_headers":{k:v for k,v in response.headers.items() if 'access-control' in k.lower()}}})+'\n')
+        try:
+            import os, json
+            log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
+            with open(log_path, 'a', encoding='utf-8') as f:
+                cors_headers = {k:v for k,v in response.headers.items() if 'access-control' in k.lower()}
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"middleware.py:98","message":"Response after call_next","data":{"path":request.url.path,"status_code":response.status_code if hasattr(response,'status_code') else None,"cors_headers":cors_headers}})+'\n')
+        except: pass
         # #endregion
         return response
 
