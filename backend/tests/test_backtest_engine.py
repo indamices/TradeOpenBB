@@ -276,7 +276,7 @@ class TestBacktestEngine:
             name="Test Strategy",
             description="Test",
             logic_code="signal = 0",  # Hold signal
-            portfolio_id=1
+            target_portfolio_id=1
         )
         db_session.add(strategy)
         db_session.commit()

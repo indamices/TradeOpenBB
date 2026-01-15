@@ -30,7 +30,7 @@ from schemas import (
     BacktestRequest, BacktestResult, ChatRequest, ChatResponse,
     StockPool as StockPoolSchema, StockPoolCreate, StockPoolUpdate,
     StockInfo as StockInfoSchema, DataSyncRequest, DataSyncResponse,
-    Conversation, ConversationMessage, ChatStrategy, ChatStrategyCreate, SaveStrategyRequest,
+    Conversation as ConversationSchema, ConversationMessage as ConversationMessageSchema, ChatStrategy as ChatStrategySchema, ChatStrategyCreate, SaveStrategyRequest,
     SymbolList, SymbolListCreate, SymbolListUpdate, SetStrategyActiveRequest, BatchSetActiveRequest
 )
 from market_service import get_realtime_quote, get_multiple_quotes, get_market_overview, get_technical_indicators
@@ -630,7 +630,7 @@ async def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
 
-@app.get("/api/ai/conversations", response_model=List[Conversation])
+@app.get("/api/ai/conversations", response_model=List[ConversationSchema])
 async def get_conversations(db: Session = Depends(get_db)):
     """获取所有聊天会话列表"""
     try:
@@ -817,14 +817,30 @@ async def get_indicators(symbol: str, indicators: str = "MACD,RSI,BB", period: i
         indicator_list = [i.strip() for i in indicators.split(',')]
         data = await get_technical_indicators(symbol.upper(), indicator_list, period)
         # Convert DataFrame to dict for JSON response
-        if hasattr(data, 'to_dict'):
-            import numpy as np
-            import pandas as pd
-            # Replace NaN and Infinity with None for JSON compatibility
+        import numpy as np
+        import pandas as pd
+        
+        if isinstance(data, dict):
+            # Handle dict case - recursively clean NaN/Inf values
+            def clean_dict(d):
+                if isinstance(d, dict):
+                    return {k: clean_dict(v) for k, v in d.items()}
+                elif isinstance(d, list):
+                    return [clean_dict(item) for item in d]
+                elif isinstance(d, (float, np.floating)):
+                    if np.isnan(d) or np.isinf(d):
+                        return None
+                    return float(d)
+                return d
+            return clean_dict(data)
+        elif hasattr(data, 'to_dict'):
+            # DataFrame case
             data_clean = data.replace([np.inf, -np.inf], np.nan)
             data_clean = data_clean.where(pd.notnull(data_clean), None)
             return data_clean.to_dict(orient='records')
-        return data
+        else:
+            # Other types - try to convert to JSON-serializable format
+            return data
     except Exception as e:
         logger.error(f"Failed to get indicators for {symbol}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get indicators: {str(e)}")
@@ -1205,7 +1221,7 @@ async def reset_daily_limit():
         raise HTTPException(status_code=500, detail=f"Failed to reset daily limit: {str(e)}")
 
 # Chat Strategy endpoints (策略提取与保存)
-@app.post("/api/ai/conversations/{conversation_id}/extract-strategies", response_model=List[ChatStrategy])
+@app.post("/api/ai/conversations/{conversation_id}/extract-strategies", response_model=List[ChatStrategySchema])
 async def extract_strategies(
     conversation_id: str,
     message_id: int,
@@ -1275,7 +1291,7 @@ async def extract_strategies(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to extract strategy: {str(e)}")
 
-@app.get("/api/ai/conversations/{conversation_id}/strategies", response_model=List[ChatStrategy])
+@app.get("/api/ai/conversations/{conversation_id}/strategies", response_model=List[ChatStrategySchema])
 async def get_chat_strategies(conversation_id: str, db: Session = Depends(get_db)):
     """获取会话中提取的所有策略"""
     try:
