@@ -34,10 +34,23 @@ const StockPoolManager: React.FC<StockPoolManagerProps> = ({
   const [stockSearchResults, setStockSearchResults] = useState<StockInfo[]>([]);
   const [stockSearchLoading, setStockSearchLoading] = useState(false);
   const [selectedMarketType, setSelectedMarketType] = useState<string>(''); // 'US', 'HK', 'CN', or '' for all
+  const [popularStocks, setPopularStocks] = useState<StockInfo[]>([]);
+  const [showPopularStocks, setShowPopularStocks] = useState(true);
+  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadPools();
+    loadPopularStocks();
   }, []);
+
+  const loadPopularStocks = async () => {
+    try {
+      const stocks = await stockPoolService.getPopularStocks(50);
+      setPopularStocks(stocks);
+    } catch (error) {
+      console.error('Failed to load popular stocks:', error);
+    }
+  };
 
   const loadPools = async () => {
     try {
@@ -52,21 +65,31 @@ const StockPoolManager: React.FC<StockPoolManagerProps> = ({
   };
 
   const handleSearchStocks = async (query: string) => {
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
     if (!query || query.length < 1) {
       setStockSearchResults([]);
+      setShowPopularStocks(true);
       return;
     }
 
-    try {
-      setStockSearchLoading(true);
-      const results = await stockPoolService.searchStocks(query, 20, selectedMarketType || undefined);
-      setStockSearchResults(results);
-    } catch (error) {
-      console.error('Failed to search stocks:', error);
-      setStockSearchResults([]);
-    } finally {
-      setStockSearchLoading(false);
-    }
+    // Debounce: wait 500ms before searching
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        setStockSearchLoading(true);
+        setShowPopularStocks(false);
+        const results = await stockPoolService.searchStocks(query, 20, selectedMarketType || undefined);
+        setStockSearchResults(results);
+      } catch (error) {
+        console.error('Failed to search stocks:', error);
+        setStockSearchResults([]);
+      } finally {
+        setStockSearchLoading(false);
+      }
+    }, 500);
   };
 
   const handleAddSymbol = (symbol: string) => {
@@ -274,6 +297,32 @@ const StockPoolManager: React.FC<StockPoolManagerProps> = ({
                   <option value="CN">A股 (CN)</option>
                 </select>
               </div>
+              
+              {/* Popular stocks (shown when no search query) */}
+              {showPopularStocks && popularStocks.length > 0 && !stockSearchQuery && (
+                <div className="mt-2">
+                  <p className="text-xs text-slate-500 mb-2">热门股票</p>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {popularStocks.map((stock) => (
+                      <button
+                        key={stock.symbol}
+                        onClick={() => handleAddSymbol(stock.symbol)}
+                        className="w-full text-left px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-slate-200 flex items-center justify-between"
+                      >
+                        <div>
+                          <span className="font-medium">{stock.symbol}</span>
+                          {stock.name && (
+                            <span className="text-slate-400 ml-2 text-xs">{stock.name}</span>
+                          )}
+                        </div>
+                        {stock.market_type && (
+                          <span className="text-xs text-slate-500">{stock.market_type}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               {/* Search results */}
               {stockSearchResults.length > 0 && (

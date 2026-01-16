@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 import logging
 import math
+import re
 
 try:
     from .schemas import BacktestRequest, BacktestResult
@@ -19,6 +20,75 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+def extract_trigger_reason(signal: int, strategy_code: str, historical_data: pd.DataFrame, symbol: str) -> str:
+    """
+    Extract trigger reason from strategy execution (rule-based, not LLM)
+    
+    Args:
+        signal: Trade signal (1=buy, -1=sell, 0=hold)
+        strategy_code: Strategy code string
+        historical_data: Historical price data
+        symbol: Stock symbol
+    
+    Returns:
+        Human-readable trigger reason
+    """
+    if signal == 0:
+        return "Hold signal: No trading condition met"
+    
+    try:
+        # Try to extract common patterns from strategy code
+        # Look for common indicators and conditions
+        
+        # Check for SMA crossover
+        if 'SMA' in strategy_code or 'sma' in strategy_code:
+            if 'rolling' in strategy_code.lower() or 'mean()' in strategy_code:
+                if signal == 1:
+                    return f"Buy signal: Short-term moving average crossed above long-term moving average for {symbol}"
+                elif signal == -1:
+                    return f"Sell signal: Short-term moving average crossed below long-term moving average for {symbol}"
+        
+        # Check for RSI
+        if 'RSI' in strategy_code or 'rsi' in strategy_code:
+            if signal == 1:
+                return f"Buy signal: RSI indicates oversold condition for {symbol}"
+            elif signal == -1:
+                return f"Sell signal: RSI indicates overbought condition for {symbol}"
+        
+        # Check for MACD
+        if 'MACD' in strategy_code or 'macd' in strategy_code:
+            if signal == 1:
+                return f"Buy signal: MACD bullish crossover for {symbol}"
+            elif signal == -1:
+                return f"Sell signal: MACD bearish crossover for {symbol}"
+        
+        # Check for price-based conditions
+        if 'Close' in strategy_code or 'close' in strategy_code:
+            if len(historical_data) > 0:
+                current_price = historical_data['Close'].iloc[-1]
+                if len(historical_data) > 1:
+                    prev_price = historical_data['Close'].iloc[-2]
+                    if signal == 1 and current_price > prev_price:
+                        return f"Buy signal: Price increased for {symbol} (${prev_price:.2f} -> ${current_price:.2f})"
+                    elif signal == -1 and current_price < prev_price:
+                        return f"Sell signal: Price decreased for {symbol} (${prev_price:.2f} -> ${current_price:.2f})"
+        
+        # Generic fallback
+        if signal == 1:
+            return f"Buy signal: Strategy condition met for {symbol}"
+        elif signal == -1:
+            return f"Sell signal: Strategy condition met for {symbol}"
+        
+    except Exception as e:
+        logger.debug(f"Failed to extract trigger reason: {str(e)}")
+    
+    # Final fallback
+    if signal == 1:
+        return f"Buy signal triggered for {symbol}"
+    elif signal == -1:
+        return f"Sell signal triggered for {symbol}"
+    return "No signal"
+
 class BacktestEngine:
     """Engine for backtesting trading strategies"""
     
@@ -29,7 +99,7 @@ class BacktestEngine:
         self.trades: List[Dict] = []
         self.equity_curve: List[float] = []
     
-    def execute_trade(self, symbol: str, signal: int, price: float, date: datetime):
+    def execute_trade(self, symbol: str, signal: int, price: float, date: datetime, trigger_reason: str = None):
         """
         Execute a trade based on signal
         
@@ -38,11 +108,15 @@ class BacktestEngine:
             signal: 1 (buy), -1 (sell), 0 (hold)
             price: Current price
             date: Trade date
+            trigger_reason: Reason for the trade (e.g., "SMA_20 crossed above SMA_50")
         """
         if signal == 0:
             return
         
         current_qty = self.positions.get(symbol, 0)
+        
+        # Convert date to string for JSON serialization
+        date_str = date.isoformat() if isinstance(date, datetime) else str(date)
         
         if signal == 1:  # Buy
             # Calculate how many shares we can buy (accounting for commission)
@@ -62,12 +136,15 @@ class BacktestEngine:
                         self.positions[symbol] = current_qty + shares_to_buy
                         
                         self.trades.append({
-                            'date': date,
+                            'date': date_str,
                             'symbol': symbol,
                             'side': 'BUY',
                             'quantity': shares_to_buy,
                             'price': price,
-                            'commission': commission
+                            'commission': commission,
+                            'trigger_reason': trigger_reason or f"Buy signal triggered for {symbol}",
+                            'pnl': None,  # Will be calculated when sold
+                            'pnl_percent': None
                         })
                         break
         
@@ -82,12 +159,15 @@ class BacktestEngine:
                 self.positions[symbol] = 0
                 
                 self.trades.append({
-                    'date': date,
+                    'date': date_str,
                     'symbol': symbol,
                     'side': 'SELL',
                     'quantity': shares_to_sell,
                     'price': price,
-                    'commission': commission
+                    'commission': commission,
+                    'trigger_reason': trigger_reason or f"Sell signal triggered for {symbol}",
+                    'pnl': None,  # Will be calculated in calculate_metrics
+                    'pnl_percent': None
                 })
     
     def calculate_portfolio_value(self, prices: Dict[str, float]) -> float:
@@ -131,21 +211,26 @@ class BacktestEngine:
         else:
             sortino_ratio = 0.0
         
-        # Max Drawdown
+        # Max Drawdown (fixed: limit to 0-100% range)
         running_max = np.maximum.accumulate(equity_array)
-        drawdown = (equity_array - running_max) / running_max
-        max_drawdown = abs(drawdown.min()) * 100
+        drawdown = (equity_array - running_max) / running_max  # This is negative or zero
+        max_drawdown_pct = abs(drawdown.min()) * 100
+        # Limit max drawdown to 0-100% range (prevent unrealistic values like thousands of percent)
+        max_drawdown = min(max_drawdown_pct, 100.0) if not math.isnan(max_drawdown_pct) and not math.isinf(max_drawdown_pct) else 0.0
         
-        # Win rate
+        # Win rate (fixed: consider commission in P&L calculation)
         if len(self.trades) >= 2:
-            # Calculate P&L for each trade pair
+            # Calculate P&L for each trade pair (considering commission)
             trade_pnl = []
             for i in range(0, len(self.trades) - 1, 2):
                 if i + 1 < len(self.trades):
                     buy_trade = self.trades[i]
                     sell_trade = self.trades[i + 1]
-                    if buy_trade['side'] == 'BUY' and sell_trade['side'] == 'SELL':
-                        pnl = (sell_trade['price'] - buy_trade['price']) * buy_trade['quantity']
+                    if buy_trade['side'] == 'BUY' and sell_trade['side'] == 'SELL' and buy_trade['symbol'] == sell_trade['symbol']:
+                        # Calculate net P&L: (sell_price - buy_price) * quantity - buy_commission - sell_commission
+                        buy_cost = buy_trade['price'] * buy_trade['quantity'] + buy_trade.get('commission', 0)
+                        sell_revenue = sell_trade['price'] * sell_trade['quantity'] - sell_trade.get('commission', 0)
+                        pnl = sell_revenue - buy_cost
                         trade_pnl.append(pnl)
             
             if trade_pnl:
@@ -282,10 +367,13 @@ async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
                     else:
                         signal = 0
                     
+                    # Extract trigger reason (rule-based)
+                    trigger_reason = extract_trigger_reason(signal, strategy.logic_code, historical_data, symbol)
+                    
                     # Execute trade
                     price = current_prices.get(symbol, 0)
                     if price > 0:
-                        engine.execute_trade(symbol, signal, price, date)
+                        engine.execute_trade(symbol, signal, price, date, trigger_reason)
                 
                 except Exception as e:
                     logger.warning(f"Strategy execution failed for {symbol} on {date}: {str(e)}")
@@ -300,7 +388,7 @@ async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
                 'value': float(portfolio_value)
             })
         
-        # Calculate metrics
+        # Calculate metrics (this also calculates P&L for each trade)
         metrics = engine.calculate_metrics(engine.equity_curve)
         
         # Calculate drawdown series
@@ -315,17 +403,26 @@ async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
                 'drawdown': float(abs(drawdown[i])) if i < len(drawdown) else 0.0
             })
         
-        # Format trades data
+        # Format trades data (include trigger_reason and P&L)
         trades_data = []
         for trade in engine.trades:
-            trade_date = trade['date']
+            trade_date = trade.get('date', '')
+            # Handle both datetime objects and strings
+            if isinstance(trade_date, datetime):
+                date_str = trade_date.isoformat()
+            else:
+                date_str = str(trade_date)
+            
             trades_data.append({
-                'date': trade_date.isoformat() if isinstance(trade_date, datetime) else str(trade_date),
+                'date': date_str,
                 'symbol': trade['symbol'],
                 'side': trade['side'],
                 'price': float(trade['price']),
                 'quantity': int(trade['quantity']),
-                'commission': float(trade.get('commission', 0))
+                'commission': float(trade.get('commission', 0)),
+                'trigger_reason': trade.get('trigger_reason', ''),
+                'pnl': trade.get('pnl'),  # May be None for buy orders
+                'pnl_percent': trade.get('pnl_percent')  # May be None for buy orders
             })
         
         # Return BacktestResult with time series data

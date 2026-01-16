@@ -202,9 +202,9 @@ class TestBacktestEngine:
         assert 'commission' in engine.trades[0]
         assert 'commission' in engine.trades[1]
         
-        # Verify dates
-        assert engine.trades[0]['date'] == date1
-        assert engine.trades[1]['date'] == date2
+        # Verify dates (now stored as ISO strings)
+        assert engine.trades[0]['date'] == date1.isoformat()
+        assert engine.trades[1]['date'] == date2.isoformat()
         
         # Compute expected P&L: (sell_price - buy_price) * quantity
         buy_qty = engine.trades[0]['quantity']

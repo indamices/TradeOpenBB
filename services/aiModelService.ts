@@ -25,6 +25,10 @@ export class AIModelService {
   async setDefaultModel(modelId: number): Promise<AIModelConfig> {
     return apiClient.put<AIModelConfig>(`/api/ai-models/${modelId}/set-default`);
   }
+
+  async setActiveModel(modelId: number): Promise<AIModelConfig> {
+    return apiClient.put<AIModelConfig>(`/api/ai-models/${modelId}/set-active`);
+  }
 }
 
 export const aiModelService = new AIModelService();

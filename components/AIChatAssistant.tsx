@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Loader2, Code, Lightbulb, MessageSquare, User, History, Trash2, Plus, Sparkles, Save, X, Power, PowerOff, FileText, Scissors } from 'lucide-react';
-import { ChatMessage, ChatRequest, ChatResponse, Conversation, ChatStrategy } from '../types';
+import { ChatMessage, ChatRequest, ChatResponse, Conversation, ChatStrategy, AIModelConfig } from '../types';
 import { apiClient } from '../services/apiClient';
 import { chatService } from '../services/chatService';
 import { tradingService } from '../services/tradingService';
+import { aiModelService } from '../services/aiModelService';
 import { ApiError } from '../services/apiClient';
 
 const AIChatAssistant: React.FC = () => {
@@ -18,12 +19,49 @@ const AIChatAssistant: React.FC = () => {
   const [savingStrategy, setSavingStrategy] = useState<ChatStrategy | null>(null);
   const [saveForm, setSaveForm] = useState({ name: '', description: '' });
   const [extractingStrategy, setExtractingStrategy] = useState<number | null>(null);
+  const [aiModels, setAiModels] = useState<AIModelConfig[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<number | undefined>();
+  const [activeModel, setActiveModel] = useState<AIModelConfig | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadConversations();
     loadChatStrategies();
+    loadAIModels();
   }, [conversationId]);
+
+  const loadAIModels = async () => {
+    try {
+      const models = await aiModelService.getAIModels();
+      setAiModels(models);
+      // Find active model
+      const active = models.find(m => m.is_active);
+      if (active) {
+        setActiveModel(active);
+        setSelectedModelId(active.id);
+      } else if (models.length > 0) {
+        // Fallback to first model if no active
+        setSelectedModelId(models[0].id);
+      }
+    } catch (error) {
+      console.error('Failed to load AI models:', error);
+    }
+  };
+
+  const handleModelChange = async (modelId: number) => {
+    try {
+      await aiModelService.setActiveModel(modelId);
+      setSelectedModelId(modelId);
+      const model = aiModels.find(m => m.id === modelId);
+      if (model) {
+        setActiveModel(model);
+      }
+      // Reload models to update active status
+      await loadAIModels();
+    } catch (error) {
+      console.error('Failed to set active model:', error);
+    }
+  };
 
   useEffect(() => {
     if (conversationId) {
@@ -569,6 +607,28 @@ const AIChatAssistant: React.FC = () => {
 
         {/* Input Area */}
         <div className="px-6 py-4 border-t border-slate-800 bg-slate-900">
+          {/* Model Selector */}
+          {aiModels.length > 0 && (
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-xs text-slate-400">当前模型:</span>
+              <select
+                value={selectedModelId || ''}
+                onChange={(e) => handleModelChange(Number(e.target.value))}
+                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {aiModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} {model.is_active ? '(激活)' : ''}
+                  </option>
+                ))}
+              </select>
+              {activeModel && (
+                <span className="text-xs text-slate-500">
+                  ({activeModel.provider} - {activeModel.model_name})
+                </span>
+              )}
+            </div>
+          )}
           <div className="flex gap-3">
             <textarea
               value={input}

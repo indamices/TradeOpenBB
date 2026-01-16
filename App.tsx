@@ -6,7 +6,7 @@ import AIChatAssistant from './components/AIChatAssistant';
 import StrategyLab from './components/StrategyLab';
 import StrategyManager from './components/StrategyManager';
 import AIModelSettings from './components/AIModelSettings';
-import { Wallet } from 'lucide-react';
+import PortfolioManager from './components/PortfolioManager';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -24,13 +24,7 @@ const App: React.FC = () => {
       case 'strategy-manager':
         return <StrategyManager />;
       case 'portfolio':
-        return (
-            <div className="flex flex-col items-center justify-center h-[50vh] text-slate-500">
-                <Wallet size={48} className="mb-4 text-slate-700" />
-                <h2 className="text-xl font-bold text-slate-400">Portfolio Management</h2>
-                <p>Advanced allocation settings would go here.</p>
-            </div>
-        );
+        return <PortfolioManager />;
       case 'ai-settings':
         return <AIModelSettings />;
       default:

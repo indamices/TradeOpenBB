@@ -37,10 +37,18 @@ const StrategyLab: React.FC = () => {
         setAiModels(models);
         setStrategies(strategyList);
         
-        // Set default model
-        const defaultModel = models.find(m => m.is_default);
-        if (defaultModel) {
-          setSelectedModelId(defaultModel.id);
+        // Set active model (prefer active over default)
+        const activeModel = models.find(m => m.is_active);
+        if (activeModel) {
+          setSelectedModelId(activeModel.id);
+        } else {
+          // Fallback to default model
+          const defaultModel = models.find(m => m.is_default);
+          if (defaultModel) {
+            setSelectedModelId(defaultModel.id);
+          } else if (models.length > 0) {
+            setSelectedModelId(models[0].id);
+          }
         }
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -152,12 +160,26 @@ const StrategyLab: React.FC = () => {
               <label className="block text-xs text-slate-500 mb-1">AI Model</label>
               <select
                 value={selectedModelId || ''}
-                onChange={(e) => setSelectedModelId(e.target.value ? parseInt(e.target.value) : undefined)}
+                onChange={async (e) => {
+                  const modelId = e.target.value ? parseInt(e.target.value) : undefined;
+                  setSelectedModelId(modelId);
+                  // Set as active model
+                  if (modelId) {
+                    try {
+                      await aiModelService.setActiveModel(modelId);
+                      // Reload models to update active status
+                      const models = await aiModelService.getAIModels();
+                      setAiModels(models);
+                    } catch (error) {
+                      console.error('Failed to set active model:', error);
+                    }
+                  }
+                }}
                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-sm"
               >
                 {aiModels.map(model => (
                   <option key={model.id} value={model.id}>
-                    {model.name} ({model.provider})
+                    {model.name} {model.is_active ? '(激活)' : ''} ({model.provider})
                   </option>
                 ))}
               </select>

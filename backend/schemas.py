@@ -73,6 +73,7 @@ class PositionCreate(PositionBase):
 
 class PositionUpdate(BaseModel):
     quantity: Optional[int] = None
+    avg_price: Optional[float] = None
     current_price: Optional[float] = None
     market_value: Optional[float] = None
     unrealized_pnl: Optional[float] = None
@@ -414,4 +415,4 @@ class BacktestResult(BaseModel):
     # Time series data
     equity_curve: Optional[List[Dict[str, Any]]] = None  # [{date: str, value: float}, ...]
     drawdown_series: Optional[List[Dict[str, Any]]] = None  # [{date: str, drawdown: float}, ...]
-    trades: Optional[List[Dict[str, Any]]] = None  # [{date, symbol, side, price, quantity}, ...]
+    trades: Optional[List[Dict[str, Any]]] = None  # [{date, symbol, side, price, quantity, commission, trigger_reason, pnl, pnl_percent}, ...]

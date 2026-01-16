@@ -33,6 +33,14 @@ class StockPoolService {
   async getStockInfo(symbol: string): Promise<StockInfo> {
     return apiClient.get<StockInfo>(`/api/market/stocks/${symbol}/info`);
   }
+
+  async getPopularStocks(limit: number = 50, marketType?: string): Promise<StockInfo[]> {
+    const params = new URLSearchParams({ limit: limit.toString() });
+    if (marketType) {
+      params.append('market_type', marketType);
+    }
+    return apiClient.get<StockInfo[]>(`/api/market/stocks/popular?${params}`);
+  }
 }
 
 export const stockPoolService = new StockPoolService();

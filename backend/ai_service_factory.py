@@ -100,11 +100,18 @@ def decrypt_api_key(encrypted_key: str) -> str:
         return encrypted_key  # Return as-is if decryption fails
 
 def get_default_model(db: Session) -> Optional[AIModelConfig]:
-    """Get default AI model configuration"""
+    """Get default AI model configuration (prefers active model over default)"""
+    # First try to get active model (this is the current model in use)
     model = db.query(AIModelConfig).filter(
-        AIModelConfig.is_default == True,
         AIModelConfig.is_active == True
     ).first()
+    
+    # If no active model, fallback to default model
+    if not model:
+        model = db.query(AIModelConfig).filter(
+            AIModelConfig.is_default == True
+        ).first()
+    
     return model
 
 def get_model_by_id(model_id: int, db: Session) -> Optional[AIModelConfig]:

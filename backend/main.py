@@ -301,11 +301,64 @@ async def create_position(position: PositionCreate, db: Session = Depends(get_db
     # Calculate market_value if not provided
     if 'market_value' not in position_dict:
         position_dict['market_value'] = position_dict['quantity'] * position_dict['current_price']
+    # Calculate unrealized P&L
+    if 'unrealized_pnl' not in position_dict:
+        cost = position_dict['quantity'] * position_dict['avg_price']
+        market_value = position_dict['market_value']
+        position_dict['unrealized_pnl'] = market_value - cost
+    if 'unrealized_pnl_percent' not in position_dict:
+        cost = position_dict['quantity'] * position_dict['avg_price']
+        if cost > 0:
+            position_dict['unrealized_pnl_percent'] = ((position_dict['current_price'] - position_dict['avg_price']) / position_dict['avg_price']) * 100
+        else:
+            position_dict['unrealized_pnl_percent'] = 0.0
+    
     db_position = Position(**position_dict)
     db.add(db_position)
     db.commit()
     db.refresh(db_position)
     return db_position
+
+@app.put("/api/positions/{position_id}", response_model=PositionSchema)
+async def update_position(position_id: int, position: PositionUpdate, db: Session = Depends(get_db)):
+    """Update a position"""
+    db_position = db.query(Position).filter(Position.id == position_id).first()
+    if not db_position:
+        raise HTTPException(status_code=404, detail="Position not found")
+    
+    update_data = position.model_dump(exclude_unset=True)
+    
+    # Recalculate market_value and P&L if price or quantity changed
+    if 'current_price' in update_data or 'quantity' in update_data:
+        current_price = update_data.get('current_price', db_position.current_price)
+        quantity = update_data.get('quantity', db_position.quantity)
+        avg_price = update_data.get('avg_price', db_position.avg_price)
+        
+        update_data['market_value'] = quantity * current_price
+        cost = quantity * avg_price
+        update_data['unrealized_pnl'] = update_data['market_value'] - cost
+        if cost > 0:
+            update_data['unrealized_pnl_percent'] = ((current_price - avg_price) / avg_price) * 100
+        else:
+            update_data['unrealized_pnl_percent'] = 0.0
+    
+    for field, value in update_data.items():
+        setattr(db_position, field, value)
+    
+    db.commit()
+    db.refresh(db_position)
+    return db_position
+
+@app.delete("/api/positions/{position_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_position(position_id: int, db: Session = Depends(get_db)):
+    """Delete a position"""
+    db_position = db.query(Position).filter(Position.id == position_id).first()
+    if not db_position:
+        raise HTTPException(status_code=404, detail="Position not found")
+    
+    db.delete(db_position)
+    db.commit()
+    return None
 
 # Order endpoints
 @app.get("/api/orders", response_model=List[OrderSchema])
@@ -1028,7 +1081,7 @@ async def test_ai_model(model_id: int, db: Session = Depends(get_db)):
 
 @app.put("/api/ai-models/{model_id}/set-default", response_model=AIModelConfigResponse)
 async def set_default_ai_model(model_id: int, db: Session = Depends(get_db)):
-    """Set default AI model"""
+    """Set default AI model (for backward compatibility)"""
     db_model = db.query(AIModelConfig).filter(AIModelConfig.id == model_id).first()
     if not db_model:
         raise HTTPException(status_code=404, detail="AI model not found")
@@ -1040,7 +1093,46 @@ async def set_default_ai_model(model_id: int, db: Session = Depends(get_db)):
     db_model.is_default = True
     db.commit()
     db.refresh(db_model)
-    return db_model
+    
+    provider_value = db_model.provider.value if hasattr(db_model.provider, 'value') else str(db_model.provider)
+    return {
+        "id": db_model.id,
+        "name": db_model.name,
+        "provider": provider_value,
+        "model_name": db_model.model_name,
+        "base_url": db_model.base_url,
+        "is_default": db_model.is_default,
+        "is_active": db_model.is_active,
+        "created_at": db_model.created_at
+    }
+
+@app.put("/api/ai-models/{model_id}/set-active", response_model=AIModelConfigResponse)
+async def set_active_ai_model(model_id: int, db: Session = Depends(get_db)):
+    """Set active AI model (use this to control which model is currently in use)"""
+    db_model = db.query(AIModelConfig).filter(AIModelConfig.id == model_id).first()
+    if not db_model:
+        raise HTTPException(status_code=404, detail="AI model not found")
+    
+    if not db_model.is_active:
+        # Unset all active models (only one should be active at a time)
+        db.query(AIModelConfig).update({"is_active": False})
+        
+        # Set this one as active
+        db_model.is_active = True
+        db.commit()
+        db.refresh(db_model)
+    
+    provider_value = db_model.provider.value if hasattr(db_model.provider, 'value') else str(db_model.provider)
+    return {
+        "id": db_model.id,
+        "name": db_model.name,
+        "provider": provider_value,
+        "model_name": db_model.model_name,
+        "base_url": db_model.base_url,
+        "is_default": db_model.is_default,
+        "is_active": db_model.is_active,
+        "created_at": db_model.created_at
+    }
 
 # Stock Pool endpoints
 @app.get("/api/stock-pools", response_model=List[StockPoolSchema])
@@ -1171,6 +1263,47 @@ async def search_stocks(
             logger.warning(f"External stock search failed: {str(e)}")
     
     return results[:limit]
+
+@app.get("/api/market/stocks/popular")
+async def get_popular_stocks(limit: int = 50, market_type: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get popular stocks (sorted by market cap or trading volume)"""
+    query = db.query(StockInfo)
+    
+    if market_type:
+        query = query.filter(StockInfo.market_type == market_type)
+    
+    # Order by market_cap descending (if available), or by symbol
+    # Note: This is a simplified version - in production, you'd want to order by actual trading volume
+    stocks = query.order_by(StockInfo.symbol.asc()).limit(limit).all()
+    
+    # If database has few stocks, fallback to common stocks
+    if len(stocks) < limit:
+        common_stocks = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'JPM', 'V', 'JNJ']
+        for symbol in common_stocks:
+            if len(stocks) >= limit:
+                break
+            existing = any(s.symbol == symbol for s in stocks)
+            if not existing:
+                # Try to fetch from yfinance
+                try:
+                    import yfinance as yf
+                    ticker = yf.Ticker(symbol)
+                    info = ticker.info
+                    stock = StockInfo(
+                        symbol=symbol,
+                        name=info.get('longName', symbol),
+                        market_type='US',
+                        exchange=info.get('exchange', 'NASDAQ'),
+                        market_cap=info.get('marketCap', 0)
+                    )
+                    db.add(stock)
+                    stocks.append(stock)
+                except:
+                    pass
+        
+        db.commit()
+    
+    return stocks[:limit]
 
 @app.get("/api/market/stocks/{symbol}/info", response_model=StockInfoSchema)
 async def get_stock_info(symbol: str, db: Session = Depends(get_db)):

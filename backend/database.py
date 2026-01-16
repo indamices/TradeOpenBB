@@ -127,7 +127,7 @@ def init_db():
                     base_url="https://api.deepseek.com/v1",
                     model_name="deepseek-chat",
                     is_default=True,  # Set as default
-                    is_active=True
+                    is_active=True  # Set as active (only one should be active)
                 )
                 db.add(deepseek_model)
                 logger.info("Created default DeepSeek Chat model")
@@ -148,14 +148,14 @@ def init_db():
                     base_url="https://open.bigmodel.cn/api/paas/v4",  # 智谱AI API endpoint
                     model_name="glm-4",  # GLM-4.7 使用 glm-4 作为模型名
                     is_default=False,  # DeepSeek is default
-                    is_active=True
+                    is_active=False  # Not active by default (only DeepSeek is active)
                 )
                 db.add(glm_model)
                 logger.info("Created default GLM-4.7 model")
             else:
                 logger.info("GLM-4.7 model already exists")
             
-            # Ensure only one default model exists
+            # Ensure only one default model exists (keep is_default for backward compatibility)
             default_models = db.query(AIModelConfig).filter(
                 AIModelConfig.is_default == True
             ).all()
@@ -165,6 +165,22 @@ def init_db():
                     if model.name != "DeepSeek Chat":
                         model.is_default = False
                 logger.info("Fixed multiple default models, keeping DeepSeek Chat as default")
+            
+            # CRITICAL: Ensure only one active model exists (use is_active to control current model)
+            active_models = db.query(AIModelConfig).filter(
+                AIModelConfig.is_active == True
+            ).all()
+            if len(active_models) > 1:
+                # Keep DeepSeek as active, deactivate others
+                for model in active_models:
+                    if model.name != "DeepSeek Chat":
+                        model.is_active = False
+                logger.info("Fixed multiple active models, keeping DeepSeek Chat as active")
+            elif len(active_models) == 0:
+                # If no active model, activate DeepSeek
+                if deepseek_model:
+                    deepseek_model.is_active = True
+                    logger.info("No active model found, activated DeepSeek Chat")
             
             db.commit()
         except Exception as e:
