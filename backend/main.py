@@ -7,7 +7,7 @@ except ImportError:
     except ImportError:
         pass
 
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -175,46 +175,21 @@ app.add_middleware(
 # This runs AFTER CORSMiddleware to add headers to error responses that CORSMiddleware might miss
 @app.middleware("http")
 async def cors_ensuring_middleware(request: Request, call_next):
-    # #region agent log
-    import json
-    import os
-    log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    origin = request.headers.get("origin")
-    method = request.method
-    path = str(request.url.path)
-    with open(log_path, 'a', encoding='utf-8') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"CORS1","location":"main.py:174","message":"CORS ensuring middleware entry","data":{"method":method,"path":path,"origin":origin}})+'\n')
-    # #endregion
-    
+    """Ensure CORS headers on all responses, including errors"""
     # Let CORSMiddleware handle OPTIONS preflight - don't intercept it here
     response = await call_next(request)
     
     # Ensure CORS headers are present on all responses (including errors that CORSMiddleware might miss)
     origin = request.headers.get("origin")
-    # #region agent log
-    with open(log_path, 'a', encoding='utf-8') as f:
-        has_cors_header = "Access-Control-Allow-Origin" in response.headers
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"CORS3","location":"main.py:180","message":"After call_next, checking CORS headers","data":{"origin":origin,"has_cors_header":has_cors_header,"status_code":response.status_code}})+'\n')
-    # #endregion
     if origin and "Access-Control-Allow-Origin" not in response.headers:
         allowed_origins = ["http://localhost:3000", "http://localhost:5173", "https://tradeopenbb-frontend.onrender.com"]
         import re
         origin_pattern = re.compile(r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app")
-        origin_matched = origin in allowed_origins or origin_pattern.match(origin)
-        # #region agent log
-        with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"CORS3","location":"main.py:186","message":"Adding CORS headers to response (CORSMiddleware missed)","data":{"origin":origin,"matched":origin_matched}})+'\n')
-        # #endregion
-        if origin_matched:
+        if origin in allowed_origins or origin_pattern.match(origin):
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With, X-CSRFToken"
-            # #region agent log
-            with open(log_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"CORS3","location":"main.py:193","message":"CORS headers added to response","data":{"headers_added":True}})+'\n')
-            # #endregion
     
     return response
 
@@ -788,57 +763,13 @@ async def get_indicators(symbol: str, indicators: str = "MACD,RSI,BB", period: i
                 return d
             return clean_dict(data)
         elif hasattr(data, 'to_dict'):
-            # #region agent log
-            import json
-            import os
-            log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-            os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            with open(log_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:773","message":"data is DataFrame, before cleaning","data":{"shape":str(data.shape),"dtypes":str(data.dtypes.to_dict())}})+'\n')
-            # #endregion
             # DataFrame case
             data_clean = data.replace([np.inf, -np.inf], np.nan)
             data_clean = data_clean.where(pd.notnull(data_clean), None)
-            # #region agent log
-            with open(log_path, 'a', encoding='utf-8') as f:
-                has_nan_after = bool(data_clean.isna().any().any())
-                numeric_cols = data_clean.select_dtypes(include=[np.number])
-                has_inf_after = bool(np.isinf(numeric_cols).any().any() if not numeric_cols.empty else False)
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:775","message":"DataFrame after replace/where cleaning","data":{"has_nan":has_nan_after,"has_inf":has_inf_after}})+'\n')
-            # #endregion
             result_dict = data_clean.to_dict(orient='records')
-            # #region agent log
-            with open(log_path, 'a', encoding='utf-8') as f:
-                result_type = type(result_dict).__name__
-                result_len = len(result_dict) if isinstance(result_dict, list) else None
-                sample_item = result_dict[0] if result_dict and isinstance(result_dict, list) else None
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:776","message":"after to_dict, before final cleaning","data":{"type":result_type,"len":result_len,"sample_keys":list(sample_item.keys()) if sample_item else None}})+'\n')
-            # #endregion
-            # #region agent log
-            with open(log_path, 'a', encoding='utf-8') as f:
-                try:
-                    json.dumps(result_dict)
-                    json_ok = True
-                    json_error = None
-                except (ValueError, TypeError) as e:
-                    json_ok = False
-                    json_error = str(e)
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:776","message":"testing JSON serialization of to_dict result","data":{"json_ok":json_ok,"json_error":json_error}})+'\n')
-            # #endregion
             # Additional cleaning pass on the dict result using sanitize_for_json
             from utils.json_serializer import sanitize_for_json
             result = sanitize_for_json(result_dict)
-            # #region agent log
-            with open(log_path, 'a', encoding='utf-8') as f:
-                try:
-                    json.dumps(result)
-                    json_ok_final = True
-                    json_error_final = None
-                except (ValueError, TypeError) as e:
-                    json_ok_final = False
-                    json_error_final = str(e)
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"main.py:777","message":"after sanitize_for_json, final JSON test","data":{"json_ok":json_ok_final,"json_error":json_error_final}})+'\n')
-            # #endregion
             return result
         else:
             # Other types - try to convert to JSON-serializable format
@@ -1223,7 +1154,7 @@ async def reset_daily_limit():
 @app.post("/api/ai/conversations/{conversation_id}/extract-strategies", response_model=List[ChatStrategySchema])
 async def extract_strategies(
     conversation_id: str,
-    message_id: int,
+    message_id: int = Query(..., description="Message ID to extract strategy from"),
     db: Session = Depends(get_db)
 ):
     """从指定消息中提取策略代码（自动识别）"""

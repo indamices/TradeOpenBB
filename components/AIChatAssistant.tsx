@@ -17,6 +17,7 @@ const AIChatAssistant: React.FC = () => {
   const [showSidebar, setShowSidebar] = useState(true);
   const [savingStrategy, setSavingStrategy] = useState<ChatStrategy | null>(null);
   const [saveForm, setSaveForm] = useState({ name: '', description: '' });
+  const [extractingStrategy, setExtractingStrategy] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -159,24 +160,50 @@ const AIChatAssistant: React.FC = () => {
   };
 
   const handleExtractStrategy = async (messageIdx: number) => {
-    if (!conversationId) return;
+    if (!conversationId) {
+      alert('请先选择一个会话');
+      return;
+    }
+    
     const message = messages[messageIdx];
-    if (message.role !== 'assistant' || !message.code_snippets) return;
+    if (message.role !== 'assistant') {
+      alert('只能从 AI 助手的消息中提取策略');
+      return;
+    }
+    
+    if (!message.code_snippets || !message.code_snippets.python) {
+      alert('该消息中没有找到策略代码');
+      return;
+    }
 
     // Find message ID from conversation detail
     try {
+      setExtractingStrategy(messageIdx);
       const detail = await chatService.getConversation(conversationId);
       const assistantMsg = detail.messages.find((msg, idx) => {
         const chatMsgIdx = messages.findIndex(m => m.timestamp === msg.created_at && m.role === msg.role);
         return chatMsgIdx === messageIdx && msg.role === 'assistant';
       });
-      if (!assistantMsg) return;
+      
+      if (!assistantMsg || !assistantMsg.id) {
+        alert('无法找到消息 ID，请刷新页面后重试');
+        return;
+      }
 
-      await chatService.extractStrategies(conversationId, assistantMsg.id);
+      const strategies = await chatService.extractStrategies(conversationId, assistantMsg.id);
       await loadChatStrategies();
-    } catch (error) {
+      
+      if (strategies && strategies.length > 0) {
+        alert(`成功提取 ${strategies.length} 个策略！`);
+      } else {
+        alert('未找到可提取的策略代码。请确保代码包含 strategy_logic 函数。');
+      }
+    } catch (error: any) {
       console.error('Failed to extract strategy:', error);
-      alert('提取策略失败');
+      const errorMsg = error.detail || error.message || '提取策略失败';
+      alert(`提取策略失败: ${errorMsg}`);
+    } finally {
+      setExtractingStrategy(null);
     }
   };
 
@@ -388,9 +415,18 @@ const AIChatAssistant: React.FC = () => {
                             {message.role === 'assistant' && code.includes('def strategy_logic') && (
                               <button
                                 onClick={() => handleExtractStrategy(idx)}
-                                className="text-xs px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded flex items-center gap-1 transition"
+                                disabled={extractingStrategy === idx}
+                                className="text-xs px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded flex items-center gap-1 transition disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <Scissors size={12} /> 提取策略
+                                {extractingStrategy === idx ? (
+                                  <>
+                                    <Loader2 size={12} className="animate-spin" /> 提取中...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Scissors size={12} /> 提取策略
+                                  </>
+                                )}
                               </button>
                             )}
                           </div>
