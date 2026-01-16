@@ -866,6 +866,25 @@ async def run_backtest_endpoint(request: BacktestRequest, db: Session = Depends(
     """Run backtest for a strategy"""
     try:
         result = await run_backtest(request, db)
+        
+        # Add index comparison if requested
+        if hasattr(request, 'compare_with_indices') and request.compare_with_indices:
+            try:
+                from services.index_comparison import compare_with_indices
+                comparisons = await compare_with_indices(
+                    result.model_dump(),
+                    request.start_date,
+                    request.end_date
+                )
+                # Add to result
+                result_dict = result.model_dump()
+                result_dict['index_comparisons'] = comparisons
+                # Create new BacktestResult with comparisons
+                from schemas import BacktestResult
+                result = BacktestResult(**result_dict)
+            except Exception as e:
+                logger.warning(f"Index comparison failed: {str(e)}")
+        
         return result
     except Exception as e:
         logger.error(f"Backtest failed: {str(e)}")

@@ -403,6 +403,7 @@ class BacktestRequest(BaseModel):
     end_date: str
     initial_cash: float = Field(gt=0)
     symbols: List[str] = Field(min_items=1)
+    compare_with_indices: bool = False  # Whether to compare with market indices
 
 class BacktestResult(BaseModel):
     sharpe_ratio: float
@@ -416,3 +417,5 @@ class BacktestResult(BaseModel):
     equity_curve: Optional[List[Dict[str, Any]]] = None  # [{date: str, value: float}, ...]
     drawdown_series: Optional[List[Dict[str, Any]]] = None  # [{date: str, drawdown: float}, ...]
     trades: Optional[List[Dict[str, Any]]] = None  # [{date, symbol, side, price, quantity, commission, trigger_reason, pnl, pnl_percent}, ...]
+    per_stock_performance: Optional[List[Dict[str, Any]]] = None  # Per-stock performance breakdown
+    index_comparisons: Optional[List[Dict[str, Any]]] = None  # Comparison with market indices

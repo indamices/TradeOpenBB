@@ -391,6 +391,10 @@ async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
         # Calculate metrics (this also calculates P&L for each trade)
         metrics = engine.calculate_metrics(engine.equity_curve)
         
+        # Calculate per-stock performance breakdown
+        per_stock_performance = engine.calculate_per_stock_performance()
+        metrics['per_stock_performance'] = per_stock_performance
+        
         # Calculate drawdown series
         equity_array = np.array(engine.equity_curve)
         running_max = np.maximum.accumulate(equity_array)
