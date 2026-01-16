@@ -17,6 +17,16 @@ const StrategyLab: React.FC = () => {
   const [selectedStrategyId, setSelectedStrategyId] = useState<number | null>(null);
   const [backtestLoading, setBacktestLoading] = useState(false);
 
+  const loadStrategies = async () => {
+    try {
+      const strategyList = await tradingService.getStrategies();
+      setStrategies(strategyList);
+    } catch (error) {
+      console.error('Failed to load strategies:', error);
+      setConsoleOutput(prev => [...prev, `> Error loading strategies.`]);
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -38,6 +48,16 @@ const StrategyLab: React.FC = () => {
       }
     };
     loadData();
+    
+    // Listen for strategy saved events to refresh the list
+    const handleStrategySaved = () => {
+      loadStrategies();
+    };
+    window.addEventListener('strategySaved', handleStrategySaved);
+    
+    return () => {
+      window.removeEventListener('strategySaved', handleStrategySaved);
+    };
   }, []);
 
   const handleGenerate = async () => {

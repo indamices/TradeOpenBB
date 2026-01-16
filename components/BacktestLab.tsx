@@ -37,6 +37,16 @@ const BacktestLab: React.FC = () => {
     start.setFullYear(start.getFullYear() - 1);
     setEndDate(end.toISOString().split('T')[0]);
     setStartDate(start.toISOString().split('T')[0]);
+    
+    // Listen for strategy saved events to refresh the list
+    const handleStrategySaved = () => {
+      loadStrategies();
+    };
+    window.addEventListener('strategySaved', handleStrategySaved);
+    
+    return () => {
+      window.removeEventListener('strategySaved', handleStrategySaved);
+    };
   }, []);
 
   const loadStrategies = async () => {

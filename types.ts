@@ -193,6 +193,7 @@ export interface StockInfo {
   symbol: string;
   name?: string;
   exchange?: string;
+  market_type?: string;  // 'US', 'HK', 'CN' (A股)
   sector?: string;
   industry?: string;
   market_cap?: number;

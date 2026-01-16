@@ -15,6 +15,16 @@ const StrategyManager: React.FC = () => {
 
   useEffect(() => {
     loadStrategies();
+    
+    // Listen for strategy saved events to refresh the list
+    const handleStrategySaved = () => {
+      loadStrategies();
+    };
+    window.addEventListener('strategySaved', handleStrategySaved);
+    
+    return () => {
+      window.removeEventListener('strategySaved', handleStrategySaved);
+    };
   }, []);
 
   useEffect(() => {

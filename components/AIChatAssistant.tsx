@@ -289,7 +289,7 @@ const AIChatAssistant: React.FC = () => {
   const handleConfirmSave = async () => {
     if (!savingStrategy || !saveForm.name.trim()) return;
     try {
-      await chatService.saveChatStrategy(savingStrategy.id, {
+      const savedStrategy = await chatService.saveChatStrategy(savingStrategy.id, {
         name: saveForm.name,
         description: saveForm.description,
         target_portfolio_id: 1
@@ -297,6 +297,12 @@ const AIChatAssistant: React.FC = () => {
       await loadChatStrategies();
       setSavingStrategy(null);
       setSaveForm({ name: '', description: '' });
+      
+      // Notify user that strategy was saved successfully
+      alert(`策略已成功保存到策略管理页面！策略ID: ${savedStrategy.id}`);
+      
+      // Trigger a custom event to notify other components to refresh
+      window.dispatchEvent(new CustomEvent('strategySaved', { detail: { strategyId: savedStrategy.id } }));
     } catch (error) {
       console.error('Failed to save strategy:', error);
       alert('保存策略失败');

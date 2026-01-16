@@ -19,7 +19,7 @@ import time
 
 # Use absolute imports for Docker deployment
 from database import get_db, init_db
-from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base, StockPool, StockInfo, Conversation, ConversationMessage, ChatStrategy, BacktestSymbolList
+from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base, StockPool, StockInfo, Conversation, ConversationMessage, ChatStrategy, BacktestSymbolList, DataSourceConfig
 from schemas import (
     Portfolio as PortfolioSchema, PortfolioCreate, PortfolioUpdate,
     Position as PositionSchema, PositionCreate, PositionUpdate,
@@ -31,7 +31,9 @@ from schemas import (
     StockPool as StockPoolSchema, StockPoolCreate, StockPoolUpdate,
     StockInfo as StockInfoSchema, DataSyncRequest, DataSyncResponse,
     Conversation as ConversationSchema, ConversationMessage as ConversationMessageSchema, ChatStrategy as ChatStrategySchema, ChatStrategyCreate, SaveStrategyRequest,
-    SymbolList, SymbolListCreate, SymbolListUpdate, SetStrategyActiveRequest, BatchSetActiveRequest
+    DataSourceConfigCreate, DataSourceConfigUpdate, DataSourceConfigResponse,
+    SymbolList, SymbolListCreate, SymbolListUpdate, SetStrategyActiveRequest, BatchSetActiveRequest,
+    DataSourceConfigCreate, DataSourceConfigUpdate, DataSourceConfigResponse
 )
 from market_service import get_realtime_quote, get_multiple_quotes, get_market_overview, get_technical_indicators
 from ai_service_factory import generate_strategy, chat_with_ai
@@ -964,16 +966,43 @@ async def update_ai_model(model_id: int, model: AIModelConfigUpdate, db: Session
     
     update_data = model.model_dump(exclude_unset=True)
     
-    # Encrypt API key if provided
+    # CRITICAL FIX: Only encrypt and update API key if a new one is provided
+    # If api_key is empty or not provided, keep the existing encrypted key
     if "api_key" in update_data:
-        update_data["api_key"] = encrypt_api_key(update_data["api_key"])
+        if update_data["api_key"] and update_data["api_key"].strip():
+            # New API key provided, encrypt it
+            try:
+                update_data["api_key"] = encrypt_api_key(update_data["api_key"].strip())
+                logger.info(f"API key updated for model {model_id}")
+            except Exception as e:
+                logger.error(f"Failed to encrypt API key: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to encrypt API key: {str(e)}"
+                )
+        else:
+            # Empty API key provided, remove it from update_data to keep existing key
+            logger.info(f"Empty API key provided for model {model_id}, keeping existing key")
+            del update_data["api_key"]
     
     for field, value in update_data.items():
         setattr(db_model, field, value)
     
     db.commit()
     db.refresh(db_model)
-    return db_model
+    
+    # Return response with proper serialization
+    provider_value = db_model.provider.value if hasattr(db_model.provider, 'value') else str(db_model.provider)
+    return {
+        "id": db_model.id,
+        "name": db_model.name,
+        "provider": provider_value,
+        "model_name": db_model.model_name,
+        "base_url": db_model.base_url,
+        "is_default": db_model.is_default,
+        "is_active": db_model.is_active,
+        "created_at": db_model.created_at
+    }
 
 @app.delete("/api/ai-models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_ai_model(model_id: int, db: Session = Depends(get_db)):
@@ -1065,8 +1094,16 @@ async def delete_stock_pool(pool_id: int, db: Session = Depends(get_db)):
 
 # Stock search endpoints
 @app.get("/api/market/stocks/search")
-async def search_stocks(q: str = "", limit: int = 50, db: Session = Depends(get_db)):
-    """Search stocks (from database cache)"""
+async def search_stocks(
+    q: str = "", 
+    limit: int = 50, 
+    market_type: Optional[str] = None,  # 'US', 'HK', 'CN'
+    db: Session = Depends(get_db)
+):
+    """Search stocks (from database cache, with fallback to external API)"""
+    results = []
+    
+    # First, try to search in database
     query = db.query(StockInfo)
     
     if q:
@@ -1077,10 +1114,63 @@ async def search_stocks(q: str = "", limit: int = 50, db: Session = Depends(get_
             (StockInfo.name.like(search_term))
         )
     
-    stocks = query.limit(limit).all()
+    # Filter by market type if provided
+    if market_type:
+        query = query.filter(StockInfo.market_type == market_type.upper())
     
-    # If not found in database, return empty list (frontend can fallback to API)
-    return [StockInfoSchema.from_orm(s) for s in stocks]
+    stocks = query.limit(limit).all()
+    results = [StockInfoSchema.from_orm(s) for s in stocks]
+    
+    # If not enough results in database, try external API fallback
+    if len(results) < limit and q:
+        try:
+            from openbb_service import openbb_service
+            import yfinance as yf
+            
+            # Try to search using yfinance (for US stocks)
+            if not market_type or market_type.upper() == 'US':
+                try:
+                    # Try direct symbol lookup
+                    ticker = yf.Ticker(q.upper())
+                    info = ticker.info
+                    if info and 'symbol' in info:
+                        # Check if already in results
+                        if not any(s.symbol == info['symbol'] for s in results):
+                            stock_info = StockInfo(
+                                symbol=info.get('symbol', q.upper()),
+                                name=info.get('longName') or info.get('shortName'),
+                                exchange=info.get('exchange'),
+                                market_type='US',
+                                sector=info.get('sector'),
+                                industry=info.get('industry'),
+                                market_cap=info.get('marketCap'),
+                                pe_ratio=info.get('trailingPE')
+                            )
+                            # Try to save to database (ignore if duplicate)
+                            try:
+                                db.add(stock_info)
+                                db.commit()
+                                db.refresh(stock_info)
+                            except Exception:
+                                db.rollback()
+                                # If exists, get from database
+                                existing = db.query(StockInfo).filter(StockInfo.symbol == stock_info.symbol).first()
+                                if existing:
+                                    stock_info = existing
+                            
+                            results.append(StockInfoSchema.from_orm(stock_info))
+                            if len(results) >= limit:
+                                return results[:limit]
+                except Exception as e:
+                    logger.debug(f"yfinance search failed for {q}: {str(e)}")
+            
+            # For other markets or if yfinance fails, could add other data sources here
+            # For now, return what we have from database
+            
+        except Exception as e:
+            logger.warning(f"External stock search failed: {str(e)}")
+    
+    return results[:limit]
 
 @app.get("/api/market/stocks/{symbol}/info", response_model=StockInfoSchema)
 async def get_stock_info(symbol: str, db: Session = Depends(get_db)):
@@ -1401,3 +1491,229 @@ async def delete_symbol_list(list_id: int, db: Session = Depends(get_db)):
         logger.error(f"Failed to delete symbol list: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete symbol list: {str(e)}")
+
+# Data Source Config endpoints
+@app.get("/api/data-sources", response_model=List[DataSourceConfigResponse])
+async def get_data_sources(db: Session = Depends(get_db)):
+    """Get all data source configurations"""
+    try:
+        sources = db.query(DataSourceConfig).order_by(DataSourceConfig.priority.desc(), DataSourceConfig.name).all()
+        result = []
+        for source in sources:
+            # Don't expose API key in response
+            result.append(DataSourceConfigResponse(
+                id=source.id,
+                name=source.name,
+                source_type=source.source_type,
+                provider=source.provider,
+                api_key=None,  # Never expose API key
+                base_url=source.base_url,
+                is_active=source.is_active,
+                is_default=source.is_default,
+                priority=source.priority,
+                supports_markets=source.supports_markets,
+                rate_limit=source.rate_limit,
+                created_at=source.created_at,
+                updated_at=source.updated_at
+            ))
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get data sources: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get data sources: {str(e)}")
+
+@app.post("/api/data-sources", response_model=DataSourceConfigResponse, status_code=status.HTTP_201_CREATED)
+async def create_data_source(source: DataSourceConfigCreate, db: Session = Depends(get_db)):
+    """Create a new data source configuration"""
+    try:
+        from ai_service_factory import encrypt_api_key
+        
+        # Encrypt API key if provided
+        encrypted_api_key = None
+        if source.api_key:
+            encrypted_api_key = encrypt_api_key(source.api_key)
+        
+        # If this is set as default, unset others
+        if source.is_default:
+            db.query(DataSourceConfig).update({"is_default": False})
+        
+        db_source = DataSourceConfig(
+            name=source.name,
+            source_type=source.source_type,
+            provider=source.provider,
+            api_key=encrypted_api_key,
+            base_url=source.base_url,
+            is_active=source.is_active,
+            is_default=source.is_default,
+            priority=source.priority,
+            supports_markets=source.supports_markets,
+            rate_limit=source.rate_limit
+        )
+        db.add(db_source)
+        db.commit()
+        db.refresh(db_source)
+        
+        return DataSourceConfigResponse(
+            id=db_source.id,
+            name=db_source.name,
+            source_type=db_source.source_type,
+            provider=db_source.provider,
+            api_key=None,
+            base_url=db_source.base_url,
+            is_active=db_source.is_active,
+            is_default=db_source.is_default,
+            priority=db_source.priority,
+            supports_markets=db_source.supports_markets,
+            rate_limit=db_source.rate_limit,
+            created_at=db_source.created_at,
+            updated_at=db_source.updated_at
+        )
+    except Exception as e:
+        logger.error(f"Failed to create data source: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create data source: {str(e)}")
+
+@app.put("/api/data-sources/{source_id}", response_model=DataSourceConfigResponse)
+async def update_data_source(source_id: int, source: DataSourceConfigUpdate, db: Session = Depends(get_db)):
+    """Update data source configuration"""
+    try:
+        from ai_service_factory import encrypt_api_key
+        
+        db_source = db.query(DataSourceConfig).filter(DataSourceConfig.id == source_id).first()
+        if not db_source:
+            raise HTTPException(status_code=404, detail="Data source not found")
+        
+        update_data = source.model_dump(exclude_unset=True)
+        
+        # Encrypt API key if provided (and not empty)
+        if "api_key" in update_data:
+            if update_data["api_key"] and update_data["api_key"].strip():
+                update_data["api_key"] = encrypt_api_key(update_data["api_key"].strip())
+            else:
+                # Empty API key, keep existing
+                del update_data["api_key"]
+        
+        # If setting as default, unset others
+        if update_data.get("is_default"):
+            db.query(DataSourceConfig).filter(DataSourceConfig.id != source_id).update({"is_default": False})
+        
+        for field, value in update_data.items():
+            setattr(db_source, field, value)
+        
+        db.commit()
+        db.refresh(db_source)
+        
+        return DataSourceConfigResponse(
+            id=db_source.id,
+            name=db_source.name,
+            source_type=db_source.source_type,
+            provider=db_source.provider,
+            api_key=None,
+            base_url=db_source.base_url,
+            is_active=db_source.is_active,
+            is_default=db_source.is_default,
+            priority=db_source.priority,
+            supports_markets=db_source.supports_markets,
+            rate_limit=db_source.rate_limit,
+            created_at=db_source.created_at,
+            updated_at=db_source.updated_at
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update data source: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update data source: {str(e)}")
+
+@app.delete("/api/data-sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_data_source(source_id: int, db: Session = Depends(get_db)):
+    """Delete data source configuration"""
+    try:
+        db_source = db.query(DataSourceConfig).filter(DataSourceConfig.id == source_id).first()
+        if not db_source:
+            raise HTTPException(status_code=404, detail="Data source not found")
+        
+        db.delete(db_source)
+        db.commit()
+        return None
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete data source: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete data source: {str(e)}")
+
+@app.get("/api/data-sources/available")
+async def get_available_data_sources():
+    """Get list of available data sources (for reference)"""
+    return {
+        "sources": [
+            {
+                "name": "OpenBB Terminal",
+                "provider": "openbb",
+                "source_type": "free",
+                "description": "Free open-source financial data platform",
+                "supports_markets": ["US", "HK", "CN"],
+                "rate_limit": 300,
+                "requires_api_key": False
+            },
+            {
+                "name": "Yahoo Finance",
+                "provider": "yfinance",
+                "source_type": "free",
+                "description": "Free market data via yfinance library",
+                "supports_markets": ["US", "HK"],
+                "rate_limit": 2000,
+                "requires_api_key": False
+            },
+            {
+                "name": "Alpha Vantage",
+                "provider": "alphavantage",
+                "source_type": "free",
+                "description": "Free tier: 5 API calls/minute, 500 calls/day",
+                "supports_markets": ["US"],
+                "rate_limit": 5,
+                "requires_api_key": True,
+                "api_key_url": "https://www.alphavantage.co/support/#api-key"
+            },
+            {
+                "name": "Polygon.io",
+                "provider": "polygon",
+                "source_type": "paid",
+                "description": "Professional market data API (paid plans available)",
+                "supports_markets": ["US"],
+                "rate_limit": 5,
+                "requires_api_key": True,
+                "api_key_url": "https://polygon.io/"
+            },
+            {
+                "name": "IEX Cloud",
+                "provider": "iexcloud",
+                "source_type": "paid",
+                "description": "Financial data API with free tier",
+                "supports_markets": ["US"],
+                "rate_limit": 100,
+                "requires_api_key": True,
+                "api_key_url": "https://iexcloud.io/"
+            },
+            {
+                "name": "Twelve Data",
+                "provider": "twelvedata",
+                "source_type": "paid",
+                "description": "Market data API with free tier",
+                "supports_markets": ["US", "HK", "CN"],
+                "rate_limit": 8,
+                "requires_api_key": True,
+                "api_key_url": "https://twelvedata.com/"
+            },
+            {
+                "name": "Quandl/Nasdaq Data Link",
+                "provider": "quandl",
+                "source_type": "paid",
+                "description": "Financial and economic data",
+                "supports_markets": ["US", "HK", "CN"],
+                "rate_limit": 50,
+                "requires_api_key": True,
+                "api_key_url": "https://data.nasdaq.com/"
+            }
+        ]
+    }

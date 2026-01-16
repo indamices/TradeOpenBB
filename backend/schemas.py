@@ -253,6 +253,7 @@ class StockInfo(BaseModel):
     symbol: str
     name: Optional[str] = None
     exchange: Optional[str] = None
+    market_type: Optional[str] = None  # 'US', 'HK', 'CN' (A股)
     sector: Optional[str] = None
     industry: Optional[str] = None
     market_cap: Optional[int] = None
@@ -339,6 +340,42 @@ class SymbolListUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     symbols: Optional[List[str]] = None
+
+# Data Source Config Schemas
+class DataSourceConfigBase(BaseModel):
+    name: str
+    source_type: str  # 'free', 'paid', 'api', 'direct'
+    provider: str  # 'openbb', 'yfinance', 'alphavantage', 'polygon', etc.
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    is_active: bool = True
+    is_default: bool = False
+    priority: int = 0
+    supports_markets: Optional[List[str]] = None  # ['US', 'HK', 'CN']
+    rate_limit: Optional[int] = None
+
+class DataSourceConfigCreate(DataSourceConfigBase):
+    pass
+
+class DataSourceConfigUpdate(BaseModel):
+    name: Optional[str] = None
+    source_type: Optional[str] = None
+    provider: Optional[str] = None
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_default: Optional[bool] = None
+    priority: Optional[int] = None
+    supports_markets: Optional[List[str]] = None
+    rate_limit: Optional[int] = None
+
+class DataSourceConfigResponse(DataSourceConfigBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
     is_active: Optional[bool] = None
 
 class SymbolList(SymbolListBase):

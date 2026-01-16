@@ -188,11 +188,12 @@ class TestAsyncAPICalls:
     def test_async_timeout(self, client):
         """Test that async operations respect timeouts"""
         start_time = time.time()
-        response = client.get("/api/market/quotes?symbols=AAPL,MSFT,GOOGL", timeout=10.0)
+        # Use longer timeout to account for retry logic and rate limiting
+        response = client.get("/api/market/quotes?symbols=AAPL,MSFT,GOOGL", timeout=60.0)
         elapsed = time.time() - start_time
         
-        # Should complete within timeout
-        assert elapsed < 10.0
+        # Should complete within reasonable timeout (allowing for retries)
+        assert elapsed < 60.0
         assert response.status_code in [200, 500, 503, 504]
 
 

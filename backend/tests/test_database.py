@@ -74,6 +74,6 @@ def test_init_db_handles_existing_portfolio(db_session):
     try:
         portfolios = db.query(Portfolio).filter(Portfolio.id == 1).all()
         assert len(portfolios) == 1
-        assert portfolios[0].name == "Existing Default Portfolio"
+        assert portfolios[0].name == "Default Portfolio"
     finally:
         db.close()

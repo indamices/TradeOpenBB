@@ -188,6 +188,7 @@ class StockInfo(Base):
     symbol = Column(String(20), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=True)
     exchange = Column(String(50), nullable=True)
+    market_type = Column(String(20), nullable=True, index=True)  # 'US', 'HK', 'CN' (A股)
     sector = Column(String(100), nullable=True)
     industry = Column(String(100), nullable=True)
     market_cap = Column(BigInteger, nullable=True)
@@ -265,5 +266,24 @@ class BacktestSymbolList(Base):
     description = Column(Text, nullable=True)  # 描述
     symbols = Column(JSON, nullable=False)  # List[str]
     is_active = Column(Boolean, default=True)  # 是否活跃
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class DataSourceConfig(Base):
+    """Data source configuration for market data"""
+    __tablename__ = "data_source_configs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False, unique=True)  # e.g., 'OpenBB', 'Yahoo Finance', 'Alpha Vantage'
+    source_type = Column(String(50), nullable=False)  # 'free', 'paid', 'api', 'direct'
+    provider = Column(String(100), nullable=False)  # 'openbb', 'yfinance', 'alphavantage', 'polygon', etc.
+    api_key = Column(Text, nullable=True)  # Encrypted API key if needed
+    base_url = Column(String(500), nullable=True)  # Base URL for API
+    is_active = Column(Boolean, default=True)
+    is_default = Column(Boolean, default=False)
+    priority = Column(Integer, default=0)  # Higher priority = used first
+    supports_markets = Column(JSON, nullable=True)  # ['US', 'HK', 'CN'] - which markets are supported
+    rate_limit = Column(Integer, nullable=True)  # Requests per minute
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

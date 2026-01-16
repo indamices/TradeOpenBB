@@ -22,8 +22,11 @@ class StockPoolService {
     return apiClient.delete<void>(`/api/stock-pools/${id}`);
   }
 
-  async searchStocks(query: string, limit: number = 50): Promise<StockInfo[]> {
+  async searchStocks(query: string, limit: number = 50, marketType?: string): Promise<StockInfo[]> {
     const params = new URLSearchParams({ q: query, limit: limit.toString() });
+    if (marketType) {
+      params.append('market_type', marketType);
+    }
     return apiClient.get<StockInfo[]>(`/api/market/stocks/search?${params}`);
   }
 
