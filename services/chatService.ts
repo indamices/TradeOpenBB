@@ -20,7 +20,8 @@ export interface ConversationDetail {
     role: 'user' | 'assistant';
     content: string;
     code_snippets?: { [key: string]: string };
-    created_at: string;
+    created_at?: string;  // Backend may return this
+    timestamp?: string;   // Backend actually returns this field
   }>;
 }
 

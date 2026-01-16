@@ -55,7 +55,7 @@ const AIChatAssistant: React.FC = () => {
       const chatMessages: ChatMessage[] = detail.messages.map(msg => ({
         role: msg.role,
         content: msg.content,
-        timestamp: msg.created_at,
+        timestamp: msg.timestamp || msg.created_at || new Date().toISOString(), // Backend returns 'timestamp', fallback to 'created_at'
         code_snippets: msg.code_snippets
       }));
       setMessages(chatMessages);
@@ -179,11 +179,82 @@ const AIChatAssistant: React.FC = () => {
     // Find message ID from conversation detail
     try {
       setExtractingStrategy(messageIdx);
+      
+      // Reload conversation to ensure timestamps match between local state and database
+      // This ensures that messages array has the same timestamps as the database
+      const targetMessageContent = messages[messageIdx]?.content;
+      const targetMessageCodeSnippets = messages[messageIdx]?.code_snippets;
+      
+      await loadConversation();
+      
+      // After reload, find the message by content (more reliable than index after reload)
+      const reloadedMessageIdx = messages.findIndex(m => 
+        m.role === 'assistant' && 
+        m.content === targetMessageContent &&
+        (m.code_snippets?.python === targetMessageCodeSnippets?.python || 
+         (!m.code_snippets && !targetMessageCodeSnippets))
+      );
+      
+      // Update messageIdx to the reloaded message index if found
+      const actualMessageIdx = reloadedMessageIdx !== -1 ? reloadedMessageIdx : messageIdx;
+      
       const detail = await chatService.getConversation(conversationId);
-      const assistantMsg = detail.messages.find((msg, idx) => {
-        const chatMsgIdx = messages.findIndex(m => m.timestamp === msg.created_at && m.role === msg.role);
-        return chatMsgIdx === messageIdx && msg.role === 'assistant';
-      });
+      
+      // Improved matching: Try multiple strategies
+      const targetMessage = messages[actualMessageIdx];
+      
+      // Strategy 1: Match by position in assistant messages array (most reliable if order is consistent)
+      const localAssistantMessages = messages.filter(m => m.role === 'assistant');
+      const targetLocalAssistantIdx = localAssistantMessages.findIndex(m => 
+        m === targetMessage || (m.timestamp === targetMessage.timestamp && m.role === targetMessage.role)
+      );
+      
+      let assistantMsg: typeof detail.messages[0] | undefined;
+      
+      if (targetLocalAssistantIdx >= 0) {
+        const detailAssistantMessages = detail.messages.filter(m => m.role === 'assistant');
+        if (targetLocalAssistantIdx < detailAssistantMessages.length) {
+          assistantMsg = detailAssistantMessages[targetLocalAssistantIdx];
+        }
+      }
+      
+      // Strategy 2: Match by timestamp with tolerance and content similarity (fallback)
+      if (!assistantMsg) {
+        assistantMsg = detail.messages.find((msg) => {
+          if (msg.role !== 'assistant') return false;
+          
+          // Backend returns 'timestamp' field, not 'created_at'
+          const msgTimestamp = msg.timestamp || msg.created_at;
+          
+          // Check timestamp with 10 second tolerance
+          const timeDiff = Math.abs(new Date(msgTimestamp).getTime() - new Date(targetMessage.timestamp).getTime());
+          const timeMatch = timeDiff < 10000; // Allow 10 second difference
+          
+          // Check content similarity (first 100 chars) as additional verification
+          const contentSimilar = msg.content.substring(0, 100) === targetMessage.content.substring(0, 100) ||
+            (msg.content.length > 0 && targetMessage.content.length > 0 && 
+             msg.content.substring(0, 50) === targetMessage.content.substring(0, 50));
+          
+          return timeMatch && contentSimilar;
+        });
+      }
+      
+      // Strategy 3: Match by exact timestamp (original logic, but as last resort)
+      if (!assistantMsg) {
+        assistantMsg = detail.messages.find((msg) => {
+          if (msg.role !== 'assistant') return false;
+          
+          const msgTimestamp = msg.timestamp || msg.created_at;
+          
+          const chatMsgIdx = messages.findIndex(m => {
+            const exactMatch = m.timestamp === msgTimestamp;
+            const timeMatch = Math.abs(new Date(m.timestamp).getTime() - new Date(msgTimestamp).getTime()) < 1000;
+            return (exactMatch || timeMatch) && m.role === msg.role;
+          });
+          
+          return chatMsgIdx === actualMessageIdx;
+        });
+      }
       
       if (!assistantMsg || !assistantMsg.id) {
         alert('无法找到消息 ID，请刷新页面后重试');
