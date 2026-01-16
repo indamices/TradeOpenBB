@@ -106,10 +106,11 @@ def get_default_model(db: Session) -> Optional[AIModelConfig]:
         AIModelConfig.is_active == True
     ).first()
     
-    # If no active model, fallback to default model
+    # If no active model, fallback to default model (but only if it's also active)
     if not model:
         model = db.query(AIModelConfig).filter(
-            AIModelConfig.is_default == True
+            AIModelConfig.is_default == True,
+            AIModelConfig.is_active == True
         ).first()
     
     return model

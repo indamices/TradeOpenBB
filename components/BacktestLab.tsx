@@ -13,6 +13,7 @@ import { ApiError } from '../services/apiClient';
 import StockPoolManager from './StockPoolManager';
 import TimeRangeSelector from './TimeRangeSelector';
 import BacktestSymbolList from './BacktestSymbolList';
+import BacktestComparison from './BacktestComparison';
 
 const BacktestLab: React.FC = () => {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -104,6 +105,12 @@ const BacktestLab: React.FC = () => {
 
       const backtestResult = await tradingService.runBacktest(request);
       setResult(backtestResult);
+      
+      // If comparison items are selected, trigger comparison
+      if (request.compare_items && request.compare_items.length > 0) {
+        // Comparison will be included in the result
+        setResult(backtestResult);
+      }
     } catch (err) {
       const apiError = err as ApiError;
       setError(apiError.detail || 'Failed to run backtest');
@@ -497,6 +504,41 @@ const BacktestLab: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Strategy Comparison */}
+          <BacktestComparison
+            mainResult={result}
+            onCompare={async (selectedItems: string[]) => {
+              if (!selectedStrategy) return;
+              
+              setLoading(true);
+              setError(null);
+              try {
+                const symbolList = useManualSymbols 
+                  ? manualSymbols.split(',').map(s => s.trim()).filter(s => s)
+                  : selectedSymbols;
+                
+                const request: BacktestRequest = {
+                  strategy_id: selectedStrategy,
+                  start_date: startDate,
+                  end_date: endDate,
+                  initial_cash: initialCash,
+                  symbols: symbolList,
+                  compare_items: selectedItems
+                };
+                
+                const backtestResult = await tradingService.runBacktest(request);
+                setResult(backtestResult);
+              } catch (err) {
+                const apiError = err as ApiError;
+                setError(apiError.detail || '对比失败');
+                console.error('Comparison error:', err);
+              } finally {
+                setLoading(false);
+              }
+            }}
+            loading={loading}
+          />
 
           {/* Trades Timeline */}
           {tradesData.length > 0 && (

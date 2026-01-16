@@ -404,6 +404,7 @@ class BacktestRequest(BaseModel):
     initial_cash: float = Field(gt=0)
     symbols: List[str] = Field(min_items=1)
     compare_with_indices: bool = False  # Whether to compare with market indices
+    compare_items: Optional[List[str]] = None  # List of items to compare: ['NASDAQ', 'SMA_CROSS', 'MOMENTUM', etc.]
 
 class BacktestResult(BaseModel):
     sharpe_ratio: float

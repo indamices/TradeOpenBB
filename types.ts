@@ -92,6 +92,8 @@ export interface BacktestRequest {
   end_date: string;
   initial_cash: number;
   symbols: string[];
+  compare_with_indices?: boolean;
+  compare_items?: string[]; // ['NASDAQ', 'SMA_CROSS', 'MOMENTUM', etc.]
 }
 
 export interface BacktestResult {
@@ -112,7 +114,51 @@ export interface BacktestResult {
     price: number;
     quantity: number;
     commission?: number;
+    trigger_reason?: string;
+    pnl?: number;
+    pnl_percent?: number;
   }>;
+  per_stock_performance?: Array<{
+    symbol: string;
+    total_trades: number;
+    buy_trades_count: number;
+    sell_trades_count: number;
+    total_quantity_bought: number;
+    total_quantity_sold: number;
+    final_position: number;
+    avg_buy_price: number;
+    avg_sell_price: number;
+    total_buy_cost: number;
+    total_sell_revenue: number;
+    total_commission: number;
+    realized_pnl: number;
+    return_percent: number;
+  }>;
+  index_comparisons?: Array<{
+    index_name: string;
+    index_total_return: number;
+    index_annualized_return: number;
+    index_sharpe_ratio: number;
+    index_max_drawdown: number;
+    backtest_total_return: number;
+    backtest_annualized_return: number;
+    backtest_sharpe_ratio: number;
+    backtest_max_drawdown: number;
+    outperformance: number;
+    outperformance_pct: number;
+  }>;
+  strategy_comparisons?: {
+    [key: string]: {
+      name: string;
+      type: 'strategy' | 'benchmark' | 'index';
+      result: BacktestResult;
+    };
+  };
+}
+
+export interface BenchmarkStrategy {
+  name: string;
+  description: string;
 }
 
 // AI Model Config Types

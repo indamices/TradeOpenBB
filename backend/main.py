@@ -38,6 +38,7 @@ from schemas import (
 from market_service import get_realtime_quote, get_multiple_quotes, get_market_overview, get_technical_indicators
 from ai_service_factory import generate_strategy, chat_with_ai
 from backtest_engine import run_backtest
+from services.benchmark_strategies import list_benchmark_strategies
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -867,8 +868,8 @@ async def run_backtest_endpoint(request: BacktestRequest, db: Session = Depends(
     try:
         result = await run_backtest(request, db)
         
-        # Add index comparison if requested
-        if hasattr(request, 'compare_with_indices') and request.compare_with_indices:
+        # Add index comparison if requested (legacy support)
+        if request.compare_with_indices:
             try:
                 from services.index_comparison import compare_with_indices
                 comparisons = await compare_with_indices(
@@ -876,14 +877,52 @@ async def run_backtest_endpoint(request: BacktestRequest, db: Session = Depends(
                     request.start_date,
                     request.end_date
                 )
-                # Add to result
                 result_dict = result.model_dump()
                 result_dict['index_comparisons'] = comparisons
-                # Create new BacktestResult with comparisons
                 from schemas import BacktestResult
                 result = BacktestResult(**result_dict)
             except Exception as e:
                 logger.warning(f"Index comparison failed: {str(e)}")
+        
+        # Add strategy comparison if compare_items is provided
+        if request.compare_items and len(request.compare_items) > 0:
+            try:
+                from services.strategy_comparison import compare_strategies
+                from services.data_service import DataService
+                from database import SessionLocal
+                
+                # Get historical data (reuse from backtest if possible, otherwise fetch)
+                all_data = {}
+                try:
+                    db_data = SessionLocal()
+                    try:
+                        async with DataService(db=db_data) as data_service:
+                            data_dict = await data_service.batch_fetch_historical_data(
+                                symbols=request.symbols,
+                                start_date=request.start_date,
+                                end_date=request.end_date
+                            )
+                            all_data = data_dict
+                    finally:
+                        if db_data:
+                            db_data.close()
+                except Exception as e:
+                    logger.warning(f"Failed to fetch data for comparison: {str(e)}")
+                
+                if all_data:
+                    comparisons = await compare_strategies(
+                        main_result=result,
+                        request=request,
+                        compare_items=request.compare_items,
+                        all_data=all_data,
+                        db=db
+                    )
+                    result_dict = result.model_dump()
+                    result_dict['strategy_comparisons'] = comparisons
+                    from schemas import BacktestResult
+                    result = BacktestResult(**result_dict)
+            except Exception as e:
+                logger.warning(f"Strategy comparison failed: {str(e)}")
         
         return result
     except Exception as e:
