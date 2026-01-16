@@ -77,8 +77,10 @@ def init_db():
         from . import models
         Base = models.Base
         Portfolio = models.Portfolio
+        AIModelConfig = models.AIModelConfig
+        AIProvider = models.AIProvider
     except ImportError:
-        from models import Base, Portfolio
+        from models import Base, Portfolio, AIModelConfig, AIProvider
     
     # Create all tables (including new ones)
     Base.metadata.create_all(bind=engine)
@@ -106,6 +108,71 @@ def init_db():
             logger.info(f"Created default portfolio with ID: {default_portfolio.id}")
         else:
             logger.info(f"Default portfolio (ID=1) already exists")
+        
+        # Create default AI models if they don't exist
+        try:
+            from ai_service_factory import encrypt_api_key
+            
+            # DeepSeek Chat model
+            deepseek_model = db.query(AIModelConfig).filter(
+                AIModelConfig.name == "DeepSeek Chat"
+            ).first()
+            if not deepseek_model:
+                deepseek_api_key = "sk-f885af006ab149aea0c9759ecc34c9c2"
+                encrypted_deepseek_key = encrypt_api_key(deepseek_api_key)
+                deepseek_model = AIModelConfig(
+                    name="DeepSeek Chat",
+                    provider=AIProvider.OPENAI,
+                    api_key=encrypted_deepseek_key,
+                    base_url="https://api.deepseek.com/v1",
+                    model_name="deepseek-chat",
+                    is_default=True,  # Set as default
+                    is_active=True
+                )
+                db.add(deepseek_model)
+                logger.info("Created default DeepSeek Chat model")
+            else:
+                logger.info("DeepSeek Chat model already exists")
+            
+            # GLM-4.7 model
+            glm_model = db.query(AIModelConfig).filter(
+                AIModelConfig.name == "GLM-4.7"
+            ).first()
+            if not glm_model:
+                glm_api_key = "35d69764ebc34827b75b1fe275e1a440.63KnzOkYt5kgUZfp"
+                encrypted_glm_key = encrypt_api_key(glm_api_key)
+                glm_model = AIModelConfig(
+                    name="GLM-4.7",
+                    provider=AIProvider.OPENAI,
+                    api_key=encrypted_glm_key,
+                    base_url="https://open.bigmodel.cn/api/paas/v4",  # 智谱AI API endpoint
+                    model_name="glm-4",  # GLM-4.7 使用 glm-4 作为模型名
+                    is_default=False,  # DeepSeek is default
+                    is_active=True
+                )
+                db.add(glm_model)
+                logger.info("Created default GLM-4.7 model")
+            else:
+                logger.info("GLM-4.7 model already exists")
+            
+            # Ensure only one default model exists
+            default_models = db.query(AIModelConfig).filter(
+                AIModelConfig.is_default == True
+            ).all()
+            if len(default_models) > 1:
+                # Keep DeepSeek as default, unset others
+                for model in default_models:
+                    if model.name != "DeepSeek Chat":
+                        model.is_default = False
+                logger.info("Fixed multiple default models, keeping DeepSeek Chat as default")
+            
+            db.commit()
+        except Exception as e:
+            logger.error(f"Error creating default AI models: {str(e)}", exc_info=True)
+            db.rollback()
+            # Don't raise here - allow app to start even if AI models fail to initialize
+            # They can be added manually later
+        
     except Exception as e:
         logger.error(f"Error creating default portfolio: {str(e)}", exc_info=True)
         db.rollback()
