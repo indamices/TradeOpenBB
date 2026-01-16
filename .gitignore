@@ -99,3 +99,28 @@ TROUBLESHOOTING_*.md
 PERFORMANCE_*.md
 LOCAL_*.md
 FRONTEND_*.md
+
+# Local environment setup files (not for production)
+# Batch files for local development
+*.bat
+backend/*.bat
+
+# PowerShell scripts for local setup and testing
+scripts/*.ps1
+push_to_github.ps1
+
+# Local environment documentation
+docs/WSL_*.md
+docs/LOCAL_*.md
+docs/FRONTEND_TESTING_GUIDE.md
+LOCAL_TESTING_GUIDE.md
+
+# Temporary files
+tatus
+tatus --short
+test_errors.log
+
+# Local encryption key generation (keep generate_encryption_key.py as it's a utility)
+# But ignore any generated keys
+*.key
+*.pem
