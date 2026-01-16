@@ -45,11 +45,15 @@ conversation_storage: Dict[str, List[Dict]] = {}
 
 app = FastAPI(title="SmartQuant API", version="1.0.0")
 
-# Add rate limiting middleware (60 requests per minute per IP)
+# Add rate limiting middleware (300 requests per minute per IP for local development)
+# In production, this should be lower (e.g., 60)
 try:
     from middleware import RateLimitMiddleware
-    app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
-    logger.info("Rate limiting middleware enabled")
+    import os
+    # Higher limit for local development
+    rate_limit = int(os.getenv("RATE_LIMIT_PER_MINUTE", "300"))
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=rate_limit)
+    logger.info(f"Rate limiting middleware enabled: {rate_limit} requests/minute")
 except Exception as e:
     logger.warning(f"Failed to enable rate limiting middleware: {str(e)}")
 
@@ -277,7 +281,7 @@ async def update_portfolio(portfolio_id: int, portfolio: PortfolioUpdate, db: Se
     if not db_portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
     
-    update_data = portfolio.dict(exclude_unset=True)
+    update_data = portfolio.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_portfolio, field, value)
     
@@ -298,7 +302,7 @@ async def create_position(position: PositionCreate, db: Session = Depends(get_db
     if not portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
     
-    position_dict = position.dict()
+    position_dict = position.model_dump()
     # Calculate market_value if not provided
     if 'market_value' not in position_dict:
         position_dict['market_value'] = position_dict['quantity'] * position_dict['current_price']
@@ -332,7 +336,7 @@ async def create_order(order: OrderCreate, db: Session = Depends(get_db)):
     if not portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
     
-    db_order = Order(**order.dict(), status=OrderStatus.PENDING)
+    db_order = Order(**order.model_dump(), status=OrderStatus.PENDING)
     db.add(db_order)
     db.commit()
     db.refresh(db_order)
@@ -368,7 +372,7 @@ async def get_active_strategies(
 
 @app.post("/api/strategies", response_model=StrategySchema, status_code=status.HTTP_201_CREATED)
 async def create_strategy(strategy: StrategyCreate, db: Session = Depends(get_db)):
-    db_strategy = Strategy(**strategy.dict())
+    db_strategy = Strategy(**strategy.model_dump())
     db.add(db_strategy)
     db.commit()
     db.refresh(db_strategy)
@@ -381,7 +385,7 @@ async def update_strategy(strategy_id: int, strategy: StrategyUpdate, db: Sessio
     if not db_strategy:
         raise HTTPException(status_code=404, detail="Strategy not found")
     
-    update_data = strategy.dict(exclude_unset=True)
+    update_data = strategy.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_strategy, field, value)
     
@@ -785,8 +789,14 @@ async def get_overview():
         from cachetools import TTLCache
         cache_key = "market_overview"
         
+        # Environment-based cache configuration
+        # Production: shorter cache for data freshness (30 seconds)
+        # Development: longer cache to reduce API calls (60 seconds)
+        ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+        cache_ttl = 30 if ENVIRONMENT == "production" else 60
+        
         if not hasattr(get_overview, '_cache'):
-            get_overview._cache = TTLCache(maxsize=1, ttl=30)
+            get_overview._cache = TTLCache(maxsize=1, ttl=cache_ttl)
         
         if cache_key in get_overview._cache:
             return get_overview._cache[cache_key]
@@ -813,15 +823,6 @@ async def run_backtest_endpoint(request: BacktestRequest, db: Session = Depends(
 @app.get("/api/ai-models", response_model=List[AIModelConfigResponse])
 async def get_ai_models(db: Session = Depends(get_db)):
     """Get all AI model configurations"""
-    # #region agent log
-    try:
-        import os, json
-        log_path = os.path.join(os.getcwd(), '.cursor', 'debug.log')
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:551","message":"get_ai_models endpoint called","data":{"path":"/api/ai-models"}})+'\n')
-    except: pass
-    # #endregion
     try:
         models = db.query(AIModelConfig).filter(AIModelConfig.is_active == True).all()
         result = []
@@ -964,7 +965,7 @@ async def update_ai_model(model_id: int, model: AIModelConfigUpdate, db: Session
     if not db_model:
         raise HTTPException(status_code=404, detail="AI model not found")
     
-    update_data = model.dict(exclude_unset=True)
+    update_data = model.model_dump(exclude_unset=True)
     
     # Encrypt API key if provided
     if "api_key" in update_data:
@@ -991,10 +992,10 @@ async def delete_ai_model(model_id: int, db: Session = Depends(get_db)):
 @app.post("/api/ai-models/{model_id}/test")
 async def test_ai_model(model_id: int, db: Session = Depends(get_db)):
     """Test AI model connection"""
-    from ai_service_factory import test_ai_model_connection
+    from ai_service_factory import check_ai_model_connection
     
     try:
-        result = await test_ai_model_connection(model_id, db)
+        result = await check_ai_model_connection(model_id, db)
         return {"success": True, "message": "Model connection successful"}
     except Exception as e:
         return {"success": False, "message": str(e)}
@@ -1033,7 +1034,7 @@ async def get_stock_pool(pool_id: int, db: Session = Depends(get_db)):
 @app.post("/api/stock-pools", response_model=StockPoolSchema, status_code=status.HTTP_201_CREATED)
 async def create_stock_pool(pool: StockPoolCreate, db: Session = Depends(get_db)):
     """Create a new stock pool"""
-    db_pool = StockPool(**pool.dict())
+    db_pool = StockPool(**pool.model_dump())
     db.add(db_pool)
     db.commit()
     db.refresh(db_pool)
@@ -1046,7 +1047,7 @@ async def update_stock_pool(pool_id: int, pool: StockPoolUpdate, db: Session = D
     if not db_pool:
         raise HTTPException(status_code=404, detail="Stock pool not found")
     
-    update_data = pool.dict(exclude_unset=True)
+    update_data = pool.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_pool, field, value)
     
@@ -1344,7 +1345,7 @@ async def get_symbol_list(list_id: int, db: Session = Depends(get_db)):
 async def create_symbol_list(list: SymbolListCreate, db: Session = Depends(get_db)):
     """创建回测标的清单"""
     try:
-        db_list = BacktestSymbolList(**list.dict())
+        db_list = BacktestSymbolList(**list.model_dump())
         db.add(db_list)
         db.commit()
         db.refresh(db_list)
@@ -1369,7 +1370,7 @@ async def update_symbol_list(
         if not db_list:
             raise HTTPException(status_code=404, detail="Symbol list not found")
         
-        update_data = list_update.dict(exclude_unset=True)
+        update_data = list_update.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_list, field, value)
         

@@ -85,12 +85,20 @@ async def get_multiple_quotes(symbols: List[str]) -> List[MarketQuote]:
         List of MarketQuote objects
     """
     import asyncio
+    import os
     
     quotes = []
-    # Process in smaller batches to avoid overwhelming the API
-    # Reduced batch size and increased delay to avoid rate limiting
-    batch_size = 3  # Reduced from 5 to 3
-    delay_between_batches = 1.0  # Increased from 0.5 to 1.0 seconds
+    # Environment-based configuration for production safety
+    # Production: conservative settings to avoid rate limiting
+    # Development: more aggressive settings for faster testing
+    ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+    
+    if ENVIRONMENT == "production":
+        batch_size = 3  # Conservative: smaller batches
+        delay_between_batches = 1.0  # Conservative: longer delay
+    else:
+        batch_size = 5  # Development: larger batches
+        delay_between_batches = 0.5  # Development: shorter delay
     
     for i in range(0, len(symbols), batch_size):
         batch = symbols[i:i + batch_size]
@@ -127,9 +135,16 @@ async def get_market_overview() -> Dict:
     try:
         # Get quotes for major indices/stocks (with caching to reduce API calls)
         from cachetools import TTLCache
+        import os
+        
+        # Environment-based cache configuration
+        # Production: shorter cache for data freshness
+        # Development: longer cache to reduce API calls
+        ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+        cache_ttl = 30 if ENVIRONMENT == "production" else 60
         
         if not hasattr(get_market_overview, '_cache'):
-            get_market_overview._cache = TTLCache(maxsize=1, ttl=30)
+            get_market_overview._cache = TTLCache(maxsize=1, ttl=cache_ttl)
         
         cache_key = "market_overview_quotes"
         if cache_key in get_market_overview._cache:

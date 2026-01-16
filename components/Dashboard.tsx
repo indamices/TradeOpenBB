@@ -39,54 +39,54 @@ const Dashboard: React.FC = () => {
       setError(null);
       const portfolioId = 1;
 
-      // Fetch portfolio and positions
+      // Step 1: Fetch basic data first (portfolio and positions) - show immediately
       const [portfolioData, positionsData] = await Promise.all([
         tradingService.getPortfolio(portfolioId),
         tradingService.getPositions(portfolioId),
       ]);
       setPortfolio(portfolioData);
       setPositions(positionsData);
+      
+      // Step 2: Set loading to false after basic data is loaded (progressive loading)
+      setLoading(false);
 
-      // Fetch market data
+      // Step 3: Fetch market data in parallel (non-blocking, loads in background)
       const symbols = positionsData.length > 0 
         ? positionsData.map(p => p.symbol)
         : ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA'];
       
-      if (symbols.length > 0) {
-        try {
-          const quotes = await tradingService.getMultipleQuotes(symbols.slice(0, 10));
-          setMarketQuotes(quotes);
-        } catch (err) {
-          console.warn('Failed to fetch market quotes:', err);
-        }
-      }
-
-      // Fetch market overview
-      try {
-        const overview = await tradingService.getMarketOverview();
-        setMarketOverview(overview);
-      } catch (err) {
-        console.warn('Failed to fetch market overview:', err);
-      }
-
-      // Fetch technical indicators for selected symbol
-      if (selectedSymbol) {
-        try {
-          const indicatorData = await tradingService.getTechnicalIndicators(
-            selectedSymbol,
-            ['SMA', 'RSI', 'MACD'],
-            20
-          );
-          setIndicators(indicatorData);
-        } catch (err) {
-          console.warn('Failed to fetch indicators:', err);
-        }
-      }
+      // Parallel execution of all market data requests
+      Promise.all([
+        // Market quotes
+        symbols.length > 0
+          ? tradingService.getMultipleQuotes(symbols.slice(0, 10))
+              .then(quotes => setMarketQuotes(quotes))
+              .catch(err => console.warn('Failed to fetch market quotes:', err))
+          : Promise.resolve(),
+        
+        // Market overview
+        tradingService.getMarketOverview()
+          .then(overview => setMarketOverview(overview))
+          .catch(err => console.warn('Failed to fetch market overview:', err)),
+        
+        // Technical indicators (only if symbol is selected)
+        selectedSymbol
+          ? tradingService.getTechnicalIndicators(
+              selectedSymbol,
+              ['SMA', 'RSI', 'MACD'],
+              20
+            )
+              .then(indicatorData => setIndicators(indicatorData))
+              .catch(err => console.warn('Failed to fetch indicators:', err))
+          : Promise.resolve(),
+      ]).catch(err => {
+        console.error('Error loading market data:', err);
+      });
+      
     } catch (err) {
       const apiError = err as ApiError;
       setError(apiError.detail || 'Failed to load data');
       console.error('Error loading dashboard data:', err);
-    } finally {
       setLoading(false);
     }
   };

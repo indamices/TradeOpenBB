@@ -51,6 +51,15 @@ services:
       # Optional: Gemini API key (if using Gemini AI)
       - key: GEMINI_API_KEY
         sync: false  # Set manually if needed
+      
+      # Environment configuration (production settings)
+      - key: ENVIRONMENT
+        value: production  # Set to production for Render deployment
+      
+      # Rate limiting (production: conservative, development: permissive)
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "60"  # Production: 60 requests/minute per IP
+        sync: false  # Can be overridden in Render Dashboard if needed
     
     healthCheckPath: /
     

@@ -214,7 +214,7 @@ async def chat_with_ai(message: str, model_id: Optional[int], db: Session, conve
         logger.error(f"Chat failed: {str(e)}", exc_info=True)
         return f"I apologize, but I encountered an error: {str(e)}. Please try again or check your AI model configuration."
 
-async def test_ai_model_connection(model_id: int, db: Session) -> bool:
+async def check_ai_model_connection(model_id: int, db: Session) -> bool:
     """
     Test connection to AI model
     

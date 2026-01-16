@@ -10,8 +10,16 @@ logger = logging.getLogger(__name__)
 # Cache for market data (使用保守配置以减少API调用)
 # 注意：这些缓存已被新的 CacheService 和 RateLimiter 取代
 # 保留以兼容旧代码，但建议迁移到新服务
-quote_cache = TTLCache(maxsize=500, ttl=60)  # 更新为60秒（1分钟）
-data_cache = TTLCache(maxsize=200, ttl=86400)  # 更新为24小时
+import os
+
+# Environment-based cache configuration
+# Production: shorter cache for data freshness (60 seconds)
+# Development: longer cache to reduce API calls (120 seconds)
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+QUOTE_CACHE_TTL = 60 if ENVIRONMENT == "production" else 120
+
+quote_cache = TTLCache(maxsize=500, ttl=QUOTE_CACHE_TTL)
+data_cache = TTLCache(maxsize=200, ttl=86400)  # 24小时（历史数据，不需要频繁更新）
 
 # Rate limiting: track last request time per symbol
 # 注意：这些已被新的 RateLimiter 取代，保留以兼容

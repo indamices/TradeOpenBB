@@ -84,5 +84,5 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "下一步:" -ForegroundColor Yellow
 Write-Host "  1. 如果更新成功，重启 Docker Desktop" -ForegroundColor White
-Write-Host "  2. 然后运行: .\start_docker.ps1" -ForegroundColor White
+Write-Host "  2. 然后运行: .\scripts\test_auto.ps1" -ForegroundColor White
 Write-Host ""

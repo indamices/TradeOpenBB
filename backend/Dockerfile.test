@@ -1,0 +1,31 @@
+# Dockerfile for running tests (matches GitHub Actions environment)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies (same as GitHub Actions)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Set test environment variables (same as GitHub Actions)
+ENV DATABASE_URL=sqlite:///./test.db
+ENV ENCRYPTION_KEY=test_key_12345678901234567890123456789012
+
+# Initialize test database
+RUN python -c "from database import init_db; init_db()"
+
+# Default command: run tests (same command as GitHub Actions)
+CMD ["pytest", "tests/", "-v", "--cov=.", "--cov-report=xml", "--cov-report=html", "--tb=short"]

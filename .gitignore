@@ -72,3 +72,30 @@ Thumbs.db
 # Project-specific
 scripts/*.whl
 scripts/*.pyc
+
+# Test coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.tox/
+.benchmarks/
+
+# Test database files
+test.db
+backend/test.db
+
+# Temporary markdown files
+*.md.bak
+*_STATUS.md
+*_GUIDE.md
+*_FIX.md
+*_SOLUTION.md
+*_TROUBLESHOOTING.md
+*_OPTIMIZATION.md
+FIX_*.md
+TROUBLESHOOTING_*.md
+PERFORMANCE_*.md
+LOCAL_*.md
+FRONTEND_*.md

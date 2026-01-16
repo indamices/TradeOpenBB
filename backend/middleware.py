@@ -28,7 +28,7 @@ DEDUP_TTL = 2  # 2 seconds
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Rate limiting middleware to prevent request overload"""
     
-    def __init__(self, app: ASGIApp, requests_per_minute: int = 60):
+    def __init__(self, app: ASGIApp, requests_per_minute: int = 300):  # 增加到300请求/分钟（本地开发）
         super().__init__(app)
         self.requests_per_minute = requests_per_minute
         self.window_seconds = 60

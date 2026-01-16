@@ -18,7 +18,7 @@ from ai_service_factory import (
     get_model_by_id,
     create_provider,
     generate_strategy,
-    test_ai_model_connection
+    check_ai_model_connection
 )
 from models import AIModelConfig, AIProvider
 from cryptography.fernet import Fernet
@@ -343,7 +343,7 @@ class TestModelConnection:
     async def test_test_model_connection_not_found(self, db_session):
         """Test connection test when model not found"""
         with pytest.raises(ValueError, match="Model not found"):
-            await test_ai_model_connection(99999, db_session)
+            await check_ai_model_connection(99999, db_session)
     
     @pytest.mark.asyncio
     async def test_test_model_connection_success(self, db_session):
@@ -364,7 +364,7 @@ class TestModelConnection:
             mock_provider.test_connection = AsyncMock(return_value=True)
             mock_create.return_value = mock_provider
             
-            result = await test_ai_model_connection(model.id, db_session)
+            result = await check_ai_model_connection(model.id, db_session)
             
             assert result is True
             mock_provider.test_connection.assert_called_once()
@@ -388,6 +388,6 @@ class TestModelConnection:
             mock_provider.test_connection = AsyncMock(return_value=False)
             mock_create.return_value = mock_provider
             
-            result = await test_ai_model_connection(model.id, db_session)
+            result = await check_ai_model_connection(model.id, db_session)
             
             assert result is False

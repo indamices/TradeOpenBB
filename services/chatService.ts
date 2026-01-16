@@ -58,9 +58,7 @@ export class ChatService {
 
   // Chat Strategy methods
   async extractStrategies(conversationId: string, messageId: number): Promise<ChatStrategy[]> {
-    return apiClient.post<ChatStrategy[]>(`/api/ai/conversations/${conversationId}/extract-strategies`, {
-      message_id: messageId
-    });
+    return apiClient.post<ChatStrategy[]>(`/api/ai/conversations/${conversationId}/extract-strategies?message_id=${messageId}`);
   }
 
   async getChatStrategies(conversationId: string): Promise<ChatStrategy[]> {
