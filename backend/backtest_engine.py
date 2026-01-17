@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 import logging
 import math
@@ -258,6 +258,129 @@ class BacktestEngine:
             'total_trades': len(self.trades),
             'total_return': sanitize_float(total_return)
         }
+    
+    def calculate_per_stock_performance(self) -> List[Dict[str, Any]]:
+        """
+        Calculate performance breakdown for each stock
+        
+        Returns:
+            List of dictionaries with per-stock performance metrics
+        """
+        per_stock = {}
+        
+        # Group trades by symbol
+        for trade in self.trades:
+            symbol = trade['symbol']
+            if symbol not in per_stock:
+                per_stock[symbol] = {
+                    'symbol': symbol,
+                    'total_trades': 0,
+                    'buy_trades_count': 0,
+                    'sell_trades_count': 0,
+                    'total_quantity_bought': 0,
+                    'total_quantity_sold': 0,
+                    'final_position': self.positions.get(symbol, 0),
+                    'total_buy_cost': 0.0,
+                    'total_sell_revenue': 0.0,
+                    'total_commission': 0.0,
+                    'realized_pnl': 0.0,
+                    'return_percent': 0.0
+                }
+            
+            stock_data = per_stock[symbol]
+            stock_data['total_trades'] += 1
+            stock_data['total_commission'] += trade.get('commission', 0)
+            
+            if trade['side'] == 'BUY':
+                stock_data['buy_trades_count'] += 1
+                stock_data['total_quantity_bought'] += trade['quantity']
+                cost = trade['price'] * trade['quantity'] + trade.get('commission', 0)
+                stock_data['total_buy_cost'] += cost
+            elif trade['side'] == 'SELL':
+                stock_data['sell_trades_count'] += 1
+                stock_data['total_quantity_sold'] += trade['quantity']
+                revenue = trade['price'] * trade['quantity'] - trade.get('commission', 0)
+                stock_data['total_sell_revenue'] += revenue
+        
+        # Calculate realized P&L and return for each stock
+        result = []
+        for symbol, stock_data in per_stock.items():
+            # Realized P&L = sell_revenue - buy_cost (for sold shares only)
+            # We need to match buys with sells
+            buys = [t for t in self.trades if t['symbol'] == symbol and t['side'] == 'BUY']
+            sells = [t for t in self.trades if t['symbol'] == symbol and t['side'] == 'SELL']
+            
+            # Calculate realized P&L by matching buy-sell pairs
+            realized_pnl = 0.0
+            buy_cost_for_sold = 0.0
+            
+            # Simple FIFO matching (copy buys to avoid modifying original)
+            buy_queue = [{'quantity': t['quantity'], 'price': t['price'], 'commission': t.get('commission', 0)} for t in buys]
+            buy_idx = 0
+            for sell_trade in sells:
+                shares_sold = sell_trade['quantity']
+                sell_revenue = sell_trade['price'] * shares_sold - sell_trade.get('commission', 0)
+                
+                # Match with buys (FIFO)
+                shares_to_match = shares_sold
+                buy_cost = 0.0
+                while shares_to_match > 0 and buy_idx < len(buy_queue):
+                    buy_item = buy_queue[buy_idx]
+                    available_shares = buy_item['quantity']
+                    
+                    if available_shares <= shares_to_match:
+                        # Use all shares from this buy
+                        cost = buy_item['price'] * available_shares + buy_item['commission']
+                        buy_cost += cost
+                        shares_to_match -= available_shares
+                        buy_idx += 1
+                    else:
+                        # Use partial shares from this buy
+                        cost = buy_item['price'] * shares_to_match + (buy_item['commission'] * shares_to_match / available_shares)
+                        buy_cost += cost
+                        buy_item['quantity'] -= shares_to_match  # Update remaining in queue
+                        shares_to_match = 0
+                
+                # Calculate P&L for this sell
+                pnl = sell_revenue - buy_cost
+                realized_pnl += pnl
+                buy_cost_for_sold += buy_cost
+            
+            stock_data['realized_pnl'] = realized_pnl
+            stock_data['buy_cost_for_sold'] = buy_cost_for_sold
+            
+            # Calculate return percentage
+            if buy_cost_for_sold > 0:
+                stock_data['return_percent'] = (realized_pnl / buy_cost_for_sold) * 100
+            else:
+                stock_data['return_percent'] = 0.0
+            
+            # Calculate average buy and sell prices
+            if stock_data['total_quantity_bought'] > 0:
+                total_buy_value = sum(t['price'] * t['quantity'] for t in buys)
+                stock_data['avg_buy_price'] = total_buy_value / stock_data['total_quantity_bought']
+            else:
+                stock_data['avg_buy_price'] = 0.0
+            
+            if stock_data['total_quantity_sold'] > 0:
+                total_sell_value = sum(t['price'] * t['quantity'] for t in sells)
+                stock_data['avg_sell_price'] = total_sell_value / stock_data['total_quantity_sold']
+            else:
+                stock_data['avg_sell_price'] = 0.0
+            
+            # Sanitize float values
+            for key in ['realized_pnl', 'return_percent', 'avg_buy_price', 'avg_sell_price', 
+                       'total_buy_cost', 'total_sell_revenue', 'total_commission']:
+                val = stock_data[key]
+                if isinstance(val, (float, np.floating)):
+                    if math.isnan(val) or math.isinf(val):
+                        stock_data[key] = 0.0
+                    else:
+                        stock_data[key] = float(val)
+            
+            result.append(stock_data)
+        
+        return result
 
 async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
     """

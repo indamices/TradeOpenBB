@@ -247,6 +247,59 @@ export interface StockInfo {
   updated_at?: string;
 }
 
+// Data Source Config Types
+export interface DataSourceConfig {
+  id: number;
+  name: string;
+  source_type: 'free' | 'paid' | 'api' | 'direct';
+  provider: string;
+  base_url?: string;
+  is_active: boolean;
+  is_default: boolean;
+  priority: number;
+  supports_markets?: string[];
+  rate_limit?: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface DataSourceConfigCreate {
+  name: string;
+  source_type: 'free' | 'paid' | 'api' | 'direct';
+  provider: string;
+  api_key?: string;
+  base_url?: string;
+  is_active?: boolean;
+  is_default?: boolean;
+  priority?: number;
+  supports_markets?: string[];
+  rate_limit?: number;
+}
+
+export interface DataSourceConfigUpdate {
+  name?: string;
+  source_type?: 'free' | 'paid' | 'api' | 'direct';
+  provider?: string;
+  api_key?: string;
+  base_url?: string;
+  is_active?: boolean;
+  is_default?: boolean;
+  priority?: number;
+  supports_markets?: string[];
+  rate_limit?: number;
+}
+
+export interface AvailableDataSource {
+  name: string;
+  provider: string;
+  source_type: string;
+  description: string;
+  supports_markets: string[];
+  rate_limit: number;
+  requires_api_key: boolean;
+  api_key_url?: string;
+}
+
 // Time Range Types
 export interface TimeRange {
   start: string;

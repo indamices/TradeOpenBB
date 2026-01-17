@@ -7,6 +7,7 @@ import StrategyLab from './components/StrategyLab';
 import StrategyManager from './components/StrategyManager';
 import AIModelSettings from './components/AIModelSettings';
 import PortfolioManager from './components/PortfolioManager';
+import DataSourceManager from './components/DataSourceManager';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -27,6 +28,8 @@ const App: React.FC = () => {
         return <PortfolioManager />;
       case 'ai-settings':
         return <AIModelSettings />;
+      case 'data-sources':
+        return <DataSourceManager />;
       default:
         return <Dashboard />;
     }

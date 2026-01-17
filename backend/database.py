@@ -79,12 +79,38 @@ def init_db():
         Portfolio = models.Portfolio
         AIModelConfig = models.AIModelConfig
         AIProvider = models.AIProvider
+        StockInfo = models.StockInfo
     except ImportError:
-        from models import Base, Portfolio, AIModelConfig, AIProvider
+        from models import Base, Portfolio, AIModelConfig, AIProvider, StockInfo
     
-    # Create all tables (including new ones)
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created/updated successfully")
+    # Create all tables (including new ones) - with error handling
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created/updated successfully")
+        
+        # Verify critical tables exist
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        existing_tables = inspector.get_table_names()
+        required_tables = ['portfolios', 'ai_model_configs', 'stock_info', 'strategies', 
+                          'positions', 'orders', 'stock_pools', 'conversations']
+        
+        missing_tables = [t for t in required_tables if t not in existing_tables]
+        if missing_tables:
+            logger.warning(f"Some tables may not have been created: {missing_tables}")
+            # Try creating them individually
+            for table_name in missing_tables:
+                try:
+                    # Get the table from Base metadata
+                    table = Base.metadata.tables.get(table_name)
+                    if table:
+                        table.create(bind=engine, checkfirst=True)
+                        logger.info(f"Created table: {table_name}")
+                except Exception as e:
+                    logger.error(f"Failed to create table {table_name}: {str(e)}")
+    except Exception as e:
+        logger.error(f"Failed to create database tables: {e}", exc_info=True)
+        raise  # Re-raise to prevent app from starting with invalid database
     
     # Create default portfolio with id=1 if it doesn't exist
     db = SessionLocal()
@@ -111,7 +137,10 @@ def init_db():
         
         # Create default AI models if they don't exist
         try:
-            from ai_service_factory import encrypt_api_key
+            try:
+                from .ai_service_factory import encrypt_api_key
+            except ImportError:
+                from ai_service_factory import encrypt_api_key
             
             # DeepSeek Chat model
             deepseek_model = db.query(AIModelConfig).filter(
@@ -151,6 +180,7 @@ def init_db():
                     is_active=False  # Not active by default (only DeepSeek is active)
                 )
                 db.add(glm_model)
+                db.flush()  # Flush to get the ID
                 logger.info("Created default GLM-4.7 model")
             else:
                 logger.info("GLM-4.7 model already exists")
@@ -181,6 +211,27 @@ def init_db():
                 if deepseek_model:
                     deepseek_model.is_active = True
                     logger.info("No active model found, activated DeepSeek Chat")
+            else:
+                # At least one model is active, ensure DeepSeek is active if it exists
+                deepseek_active = any(m.name == "DeepSeek Chat" and m.is_active for m in active_models)
+                if deepseek_model and not deepseek_active:
+                    # Deactivate all, activate DeepSeek
+                    for model in active_models:
+                        model.is_active = False
+                    deepseek_model.is_active = True
+                    logger.info("Ensured DeepSeek Chat is the active model")
+            
+            # Ensure both models exist and have correct status
+            all_models = db.query(AIModelConfig).all()
+            deepseek_exists = any(m.name == "DeepSeek Chat" for m in all_models)
+            glm_exists = any(m.name == "GLM-4.7" for m in all_models)
+            
+            if not deepseek_exists:
+                logger.warning("DeepSeek Chat model not found after initialization")
+            if not glm_exists:
+                logger.warning("GLM-4.7 model not found after initialization")
+            
+            logger.info(f"Initialized AI models: DeepSeek Chat (exists: {deepseek_exists}), GLM-4.7 (exists: {glm_exists})")
             
             db.commit()
         except Exception as e:
