@@ -552,12 +552,16 @@ async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
                 'pnl_percent': trade.get('pnl_percent')  # May be None for buy orders
             })
         
+        # Calculate per-stock performance breakdown
+        per_stock_performance = engine.calculate_per_stock_performance()
+        
         # Return BacktestResult with time series data
         return BacktestResult(
             **metrics,
             equity_curve=equity_curve_with_dates,
             drawdown_series=drawdown_series,
-            trades=trades_data
+            trades=trades_data,
+            per_stock_performance=per_stock_performance
         )
         
     except Exception as e:

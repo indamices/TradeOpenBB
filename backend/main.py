@@ -934,7 +934,8 @@ async def run_backtest_endpoint(request: BacktestRequest, db: Session = Depends(
 async def get_ai_models(db: Session = Depends(get_db)):
     """Get all AI model configurations"""
     try:
-        models = db.query(AIModelConfig).filter(AIModelConfig.is_active == True).all()
+        # Show all models (including inactive ones) so users can activate/deactivate them
+        models = db.query(AIModelConfig).order_by(AIModelConfig.is_active.desc(), AIModelConfig.is_default.desc(), AIModelConfig.created_at.desc()).all()
         result = []
         for model in models:
             # Handle provider enum conversion - SQLAlchemy may return string or enum
@@ -1832,6 +1833,61 @@ async def delete_data_source(source_id: int, db: Session = Depends(get_db)):
         logger.error(f"Failed to delete data source: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete data source: {str(e)}")
+
+@app.post("/api/data-sources/{source_id}/test")
+async def test_data_source_connection(source_id: int, db: Session = Depends(get_db)):
+    """Test connection to a data source"""
+    try:
+        from datetime import datetime, timedelta
+        db_source = db.query(DataSourceConfig).filter(DataSourceConfig.id == source_id).first()
+        if not db_source:
+            raise HTTPException(status_code=404, detail="Data source not found")
+        
+        # Test by fetching a well-known symbol (e.g., AAPL)
+        test_symbol = "AAPL"
+        test_end_date = datetime.now().strftime('%Y-%m-%d')
+        test_start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        
+        try:
+            # Use the configured data source to fetch test data
+            from services.data_service import DataService
+            async with DataService(db=db) as data_service:
+                # Temporarily set the source_id for testing
+                data_service.test_source_id = source_id
+                data = await data_service.get_historical_data(
+                    test_symbol,
+                    test_start_date,
+                    test_end_date,
+                    use_cache=False  # Don't use cache for testing
+                )
+                
+                if data is not None and not data.empty:
+                    return {
+                        "success": True,
+                        "message": f"连接成功。为 {test_symbol} 获取了 {len(data)} 个数据点。",
+                        "data_points": len(data),
+                        "symbol": test_symbol,
+                        "date_range": f"{test_start_date} to {test_end_date}"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": f"连接成功但未返回 {test_symbol} 的数据。",
+                        "symbol": test_symbol
+                    }
+        except Exception as e:
+            logger.error(f"Data source test failed: {str(e)}")
+            return {
+                "success": False,
+                "message": f"连接测试失败: {str(e)}",
+                "error": str(e)
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to test data source: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to test data source: {str(e)}")
 
 @app.get("/api/data-sources/available")
 async def get_available_data_sources():

@@ -4,11 +4,17 @@ Tests for AI Models API endpoints
 import pytest
 from fastapi import status
 
-def test_get_ai_models_empty(client):
+def test_get_ai_models_empty(client, db_session):
     """Test getting AI models when none exist"""
+    # Ensure database is clean (remove any models created by init_db)
+    from models import AIModelConfig
+    db_session.query(AIModelConfig).delete()
+    db_session.commit()
+    
     response = client.get("/api/ai-models")
     assert response.status_code == status.HTTP_200_OK
-    assert response.json() == []
+    models = response.json()
+    assert len(models) == 0, f"Expected empty list, but got {models}"
 
 def test_create_ai_model(client, sample_ai_model_data):
     """Test creating an AI model config"""
@@ -21,8 +27,13 @@ def test_create_ai_model(client, sample_ai_model_data):
     # API key should be encrypted/hidden
     assert "api_key" not in data or data.get("api_key") != sample_ai_model_data["api_key"]
 
-def test_get_ai_models(client, sample_ai_model_data):
+def test_get_ai_models(client, db_session, sample_ai_model_data):
     """Test getting all AI models"""
+    # Ensure database is clean (remove any models created by init_db)
+    from models import AIModelConfig
+    db_session.query(AIModelConfig).delete()
+    db_session.commit()
+    
     # Create a model
     client.post("/api/ai-models", json=sample_ai_model_data)
     
@@ -30,7 +41,7 @@ def test_get_ai_models(client, sample_ai_model_data):
     response = client.get("/api/ai-models")
     assert response.status_code == status.HTTP_200_OK
     models = response.json()
-    assert len(models) == 1
+    assert len(models) == 1, f"Expected 1 model, but got {len(models)}: {[m['name'] for m in models]}"
     assert models[0]["name"] == sample_ai_model_data["name"]
 
 def test_update_ai_model(client, sample_ai_model_data):
@@ -48,8 +59,13 @@ def test_update_ai_model(client, sample_ai_model_data):
     data = response.json()
     assert data["name"] == "Updated Model"
 
-def test_delete_ai_model(client, sample_ai_model_data):
+def test_delete_ai_model(client, db_session, sample_ai_model_data):
     """Test deleting an AI model"""
+    # Ensure database is clean (remove any models created by init_db)
+    from models import AIModelConfig
+    db_session.query(AIModelConfig).delete()
+    db_session.commit()
+    
     # Create model
     create_response = client.post("/api/ai-models", json=sample_ai_model_data)
     assert create_response.status_code in [200, 201], f"Expected 200/201, got {create_response.status_code}: {create_response.text}"
@@ -60,9 +76,10 @@ def test_delete_ai_model(client, sample_ai_model_data):
     response = client.delete(f"/api/ai-models/{model_id}")
     assert response.status_code == status.HTTP_204_NO_CONTENT
     
-    # Verify deleted
+    # Verify deleted (ensure no models remain)
     get_response = client.get("/api/ai-models")
-    assert len(get_response.json()) == 0
+    models = get_response.json()
+    assert len(models) == 0, f"Expected 0 models after delete, but got {len(models)}: {[m['name'] for m in models]}"
 
 def test_set_default_ai_model(client, sample_ai_model_data):
     """Test setting default AI model"""

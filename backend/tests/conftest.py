@@ -27,12 +27,16 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 @pytest.fixture(scope="function")
 def db_session():
     """Create a fresh database for each test"""
+    # Drop all tables first to ensure clean state
+    Base.metadata.drop_all(bind=engine)
+    # Create all tables
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
     try:
         yield db
     finally:
         db.close()
+        # Clean up all data after test
         Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture(scope="function")
@@ -44,10 +48,30 @@ def client(db_session):
         finally:
             pass
     
+    # Override get_db dependency
     app.dependency_overrides[get_db] = override_get_db
+    
+    # Clean up any data that might have been created by init_db() during startup
+    # The startup event calls init_db() which creates default AI models and portfolio
+    # This pollutes the test database, breaking test isolation
+    from models import AIModelConfig, Portfolio
+    db_session.query(AIModelConfig).delete()
+    db_session.query(Portfolio).filter(Portfolio.id == 1).delete()
+    db_session.commit()
+    
     with TestClient(app) as test_client:
+        # Clean up again after TestClient initialization in case startup event ran
+        db_session.query(AIModelConfig).delete()
+        db_session.query(Portfolio).filter(Portfolio.id == 1).delete()
+        db_session.commit()
         yield test_client
+    
     app.dependency_overrides.clear()
+    
+    # Final cleanup after test
+    db_session.query(AIModelConfig).delete()
+    db_session.query(Portfolio).filter(Portfolio.id == 1).delete()
+    db_session.commit()
 
 @pytest.fixture
 def sample_portfolio_data():

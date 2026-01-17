@@ -24,5 +24,9 @@ export const dataSourceService = {
 
   async getAvailableDataSources(): Promise<{ sources: AvailableDataSource[] }> {
     return apiClient.get<{ sources: AvailableDataSource[] }>('/api/data-sources/available');
+  },
+
+  async testDataSourceConnection(id: number): Promise<{ success: boolean; message: string; data_points?: number; symbol?: string; date_range?: string; error?: string }> {
+    return apiClient.post(`/api/data-sources/${id}/test`);
   }
 };

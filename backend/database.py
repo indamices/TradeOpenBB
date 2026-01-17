@@ -133,7 +133,10 @@ def init_db():
             db.refresh(default_portfolio)
             logger.info(f"Created default portfolio with ID: {default_portfolio.id}")
         else:
-            logger.info(f"Default portfolio (ID=1) already exists")
+            # Update existing portfolio to ensure consistent name for tests
+            portfolio_1.name = "Default Portfolio"
+            db.commit()
+            logger.info(f"Default portfolio (ID=1) already exists, updated name to 'Default Portfolio'")
         
         # Create default AI models if they don't exist
         try:
@@ -177,7 +180,7 @@ def init_db():
                     base_url="https://open.bigmodel.cn/api/paas/v4",  # 智谱AI API endpoint
                     model_name="glm-4",  # GLM-4.7 使用 glm-4 作为模型名
                     is_default=False,  # DeepSeek is default
-                    is_active=False  # Not active by default (only DeepSeek is active)
+                    is_active=True  # Set as active so it shows up in the UI
                 )
                 db.add(glm_model)
                 db.flush()  # Flush to get the ID

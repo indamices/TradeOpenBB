@@ -96,8 +96,13 @@ class TestModelQueries:
     
     def test_get_default_model_none(self, db_session):
         """Test getting default model when none exists"""
+        # Ensure database is clean (remove any models created by init_db)
+        from models import AIModelConfig
+        db_session.query(AIModelConfig).delete()
+        db_session.commit()
+        
         model = get_default_model(db_session)
-        assert model is None
+        assert model is None, f"Expected None, but got model: {model.name if model else None}"
     
     def test_get_default_model_exists(self, db_session):
         """Test getting default model when it exists"""

@@ -440,6 +440,26 @@ const DataSourceManager: React.FC = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <button
+                          onClick={async () => {
+                            try {
+                              setError(null);
+                              const result = await dataSourceService.testDataSourceConnection(source.id);
+                              if (result.success) {
+                                alert(`连接测试成功！\n${result.message}\n数据点: ${result.data_points || 0}`);
+                              } else {
+                                alert(`连接测试失败：\n${result.message}`);
+                              }
+                            } catch (err) {
+                              const apiError = err as ApiError;
+                              setError(apiError.detail || '连接测试失败');
+                            }
+                          }}
+                          className="text-blue-400 hover:text-blue-300 transition-colors"
+                          title="测试连接"
+                        >
+                          <Settings size={18} />
+                        </button>
+                        <button
                           onClick={() => handleDelete(source.id)}
                           className="text-red-400 hover:text-red-300 transition-colors"
                           title="删除"

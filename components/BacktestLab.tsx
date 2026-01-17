@@ -505,6 +505,67 @@ const BacktestLab: React.FC = () => {
             </div>
           )}
 
+          {/* Per-Stock Performance */}
+          {result.per_stock_performance && result.per_stock_performance.length > 0 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-800">
+                <h3 className="text-lg font-semibold text-slate-200">个股盈亏分析</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-800/50 text-slate-400 text-xs uppercase font-medium">
+                    <tr>
+                      <th className="px-6 py-3">标的</th>
+                      <th className="px-6 py-3">总交易</th>
+                      <th className="px-6 py-3">买入次数</th>
+                      <th className="px-6 py-3">卖出次数</th>
+                      <th className="px-6 py-3">买入数量</th>
+                      <th className="px-6 py-3">卖出数量</th>
+                      <th className="px-6 py-3">持仓</th>
+                      <th className="px-6 py-3">平均买入价</th>
+                      <th className="px-6 py-3">平均卖出价</th>
+                      <th className="px-6 py-3">总佣金</th>
+                      <th className="px-6 py-3">已实现盈亏</th>
+                      <th className="px-6 py-3">收益率</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {result.per_stock_performance.map((stock, idx) => (
+                      <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="px-6 py-4 font-bold text-slate-200">{stock.symbol}</td>
+                        <td className="px-6 py-4 text-slate-300">{stock.total_trades}</td>
+                        <td className="px-6 py-4 text-slate-300">{stock.buy_trades_count}</td>
+                        <td className="px-6 py-4 text-slate-300">{stock.sell_trades_count}</td>
+                        <td className="px-6 py-4 text-slate-300">{stock.total_quantity_bought}</td>
+                        <td className="px-6 py-4 text-slate-300">{stock.total_quantity_sold}</td>
+                        <td className="px-6 py-4 text-slate-300">{stock.final_position}</td>
+                        <td className="px-6 py-4 text-slate-300">
+                          ${stock.avg_buy_price?.toFixed(2) || '0.00'}
+                        </td>
+                        <td className="px-6 py-4 text-slate-300">
+                          ${stock.avg_sell_price?.toFixed(2) || '0.00'}
+                        </td>
+                        <td className="px-6 py-4 text-slate-400">
+                          ${stock.total_commission.toFixed(2)}
+                        </td>
+                        <td className={`px-6 py-4 font-medium ${
+                          stock.realized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          ${stock.realized_pnl.toFixed(2)}
+                        </td>
+                        <td className={`px-6 py-4 font-medium ${
+                          stock.return_percent >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          {stock.return_percent.toFixed(2)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Strategy Comparison */}
           <BacktestComparison
             mainResult={result}
@@ -556,6 +617,9 @@ const BacktestLab: React.FC = () => {
                       <th className="px-6 py-3">价格</th>
                       <th className="px-6 py-3">数量</th>
                       <th className="px-6 py-3">佣金</th>
+                      <th className="px-6 py-3">触发原因</th>
+                      <th className="px-6 py-3">盈亏</th>
+                      <th className="px-6 py-3">盈亏%</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
@@ -574,6 +638,27 @@ const BacktestLab: React.FC = () => {
                         <td className="px-6 py-4 text-slate-300">{trade.quantity}</td>
                         <td className="px-6 py-4 text-slate-400">
                           ${trade.commission?.toFixed(2) || '0.00'}
+                        </td>
+                        <td className="px-6 py-4 text-slate-400 text-sm max-w-xs truncate" title={trade.trigger_reason}>
+                          {trade.trigger_reason || '-'}
+                        </td>
+                        <td className={`px-6 py-4 font-medium ${
+                          trade.pnl !== null && trade.pnl !== undefined
+                            ? (trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400')
+                            : 'text-slate-400'
+                        }`}>
+                          {trade.pnl !== null && trade.pnl !== undefined
+                            ? `$${trade.pnl.toFixed(2)}`
+                            : '-'}
+                        </td>
+                        <td className={`px-6 py-4 font-medium ${
+                          trade.pnl_percent !== null && trade.pnl_percent !== undefined
+                            ? (trade.pnl_percent >= 0 ? 'text-emerald-400' : 'text-red-400')
+                            : 'text-slate-400'
+                        }`}>
+                          {trade.pnl_percent !== null && trade.pnl_percent !== undefined
+                            ? `${trade.pnl_percent.toFixed(2)}%`
+                            : '-'}
                         </td>
                       </tr>
                     ))}

@@ -113,6 +113,7 @@ def get_default_model(db: Session) -> Optional[AIModelConfig]:
             AIModelConfig.is_active == True
         ).first()
     
+    # If still no model, return None (no models configured)
     return model
 
 def get_model_by_id(model_id: int, db: Session) -> Optional[AIModelConfig]:

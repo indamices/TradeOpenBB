@@ -30,8 +30,10 @@ logger = logging.getLogger(__name__)
 class DataService:
     """Service for fetching and managing market data with caching"""
     
-    def __init__(self, db: Optional[Session] = None):
+    def __init__(self, db: Optional[Session] = None, source_id: Optional[int] = None):
         self.db = db or SessionLocal()
+        self.source_id = source_id  # Optional: specific data source to use
+        self.test_source_id = None  # For testing purposes
     
     def close(self):
         """Close database session if it was created here"""
@@ -201,12 +203,57 @@ class DataService:
             return [(start_date, end_date)]
     
     async def _fetch_from_api(self, symbol: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
-        """Fetch data from API with rate limiting"""
+        """Fetch data from API with rate limiting and data source selection"""
         try:
             # Use rate limiter for API calls
             await rate_limiter.wait_if_needed()
             
-            # Fetch using openbb_service (which uses yfinance)
+            # Determine which data source to use
+            source_to_use = self.test_source_id or self.source_id
+            
+            if source_to_use:
+                # Use specific data source
+                try:
+                    from models import DataSourceConfig
+                    db_source = self.db.query(DataSourceConfig).filter(
+                        DataSourceConfig.id == source_to_use,
+                        DataSourceConfig.is_active == True
+                    ).first()
+                    
+                    if db_source and db_source.provider:
+                        logger.info(f"Using data source: {db_source.name} (provider: {db_source.provider})")
+                        # For now, support openbb and yfinance providers
+                        # Future: Add support for other providers based on db_source.provider
+                        if db_source.provider.lower() in ['openbb', 'yfinance']:
+                            data = openbb_service.get_stock_data(symbol, start_date, end_date)
+                            if data is not None and not data.empty:
+                                return data
+                except Exception as e:
+                    logger.warning(f"Failed to use specified data source {source_to_use}: {e}")
+            
+            # Fallback: Try active data sources by priority
+            try:
+                from models import DataSourceConfig
+                active_sources = self.db.query(DataSourceConfig).filter(
+                    DataSourceConfig.is_active == True
+                ).order_by(DataSourceConfig.priority.desc(), DataSourceConfig.is_default.desc()).all()
+                
+                for db_source in active_sources:
+                    try:
+                        logger.info(f"Trying data source: {db_source.name} (provider: {db_source.provider})")
+                        if db_source.provider and db_source.provider.lower() in ['openbb', 'yfinance']:
+                            data = openbb_service.get_stock_data(symbol, start_date, end_date)
+                            if data is not None and not data.empty:
+                                logger.info(f"Successfully fetched data using {db_source.name}")
+                                return data
+                    except Exception as e:
+                        logger.warning(f"Data source {db_source.name} failed: {e}")
+                        continue
+            except Exception as e:
+                logger.warning(f"Error querying data sources: {e}")
+            
+            # Final fallback: Use openbb_service directly
+            logger.info(f"Using default openbb_service for {symbol}")
             data = openbb_service.get_stock_data(symbol, start_date, end_date)
             
             if data is not None and not data.empty:
