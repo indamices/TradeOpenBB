@@ -516,7 +516,6 @@ async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
         
         # Calculate per-stock performance breakdown
         per_stock_performance = engine.calculate_per_stock_performance()
-        metrics['per_stock_performance'] = per_stock_performance
         
         # Calculate drawdown series
         equity_array = np.array(engine.equity_curve)
@@ -552,10 +551,8 @@ async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
                 'pnl_percent': trade.get('pnl_percent')  # May be None for buy orders
             })
         
-        # Calculate per-stock performance breakdown
-        per_stock_performance = engine.calculate_per_stock_performance()
-        
         # Return BacktestResult with time series data
+        # Note: per_stock_performance is NOT in metrics dict, so we pass it separately
         return BacktestResult(
             **metrics,
             equity_curve=equity_curve_with_dates,

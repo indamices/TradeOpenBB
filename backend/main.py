@@ -1326,43 +1326,102 @@ async def search_stocks(
 @app.get("/api/market/stocks/popular")
 async def get_popular_stocks(limit: int = 50, market_type: Optional[str] = None, db: Session = Depends(get_db)):
     """Get popular stocks (sorted by market cap or trading volume)"""
-    query = db.query(StockInfo)
-    
-    if market_type:
-        query = query.filter(StockInfo.market_type == market_type)
-    
-    # Order by market_cap descending (if available), or by symbol
-    # Note: This is a simplified version - in production, you'd want to order by actual trading volume
-    stocks = query.order_by(StockInfo.symbol.asc()).limit(limit).all()
-    
-    # If database has few stocks, fallback to common stocks
-    if len(stocks) < limit:
-        common_stocks = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'JPM', 'V', 'JNJ']
-        for symbol in common_stocks:
-            if len(stocks) >= limit:
-                break
-            existing = any(s.symbol == symbol for s in stocks)
-            if not existing:
-                # Try to fetch from yfinance
-                try:
-                    import yfinance as yf
-                    ticker = yf.Ticker(symbol)
-                    info = ticker.info
-                    stock = StockInfo(
-                        symbol=symbol,
-                        name=info.get('longName', symbol),
-                        market_type='US',
-                        exchange=info.get('exchange', 'NASDAQ'),
-                        market_cap=info.get('marketCap', 0)
-                    )
-                    db.add(stock)
-                    stocks.append(stock)
-                except:
-                    pass
+    try:
+        # Check if StockInfo table exists
+        from sqlalchemy import inspect
+        inspector = inspect(db.bind)
+        if 'stock_info' not in inspector.get_table_names():
+            # Table doesn't exist, return default stocks
+            logger.warning("stock_info table does not exist, returning default stocks")
+            common_stocks = [
+                {'symbol': 'AAPL', 'name': 'Apple Inc.', 'market_type': 'US'},
+                {'symbol': 'MSFT', 'name': 'Microsoft Corporation', 'market_type': 'US'},
+                {'symbol': 'GOOGL', 'name': 'Alphabet Inc.', 'market_type': 'US'},
+                {'symbol': 'AMZN', 'name': 'Amazon.com Inc.', 'market_type': 'US'},
+                {'symbol': 'TSLA', 'name': 'Tesla Inc.', 'market_type': 'US'},
+                {'symbol': 'META', 'name': 'Meta Platforms Inc.', 'market_type': 'US'},
+                {'symbol': 'NVDA', 'name': 'NVIDIA Corporation', 'market_type': 'US'},
+                {'symbol': 'JPM', 'name': 'JPMorgan Chase & Co.', 'market_type': 'US'},
+                {'symbol': 'V', 'name': 'Visa Inc.', 'market_type': 'US'},
+                {'symbol': 'JNJ', 'name': 'Johnson & Johnson', 'market_type': 'US'},
+            ]
+            if market_type:
+                common_stocks = [s for s in common_stocks if s['market_type'] == market_type.upper()]
+            return common_stocks[:limit]
         
-        db.commit()
-    
-    return stocks[:limit]
+        query = db.query(StockInfo)
+        
+        if market_type:
+            query = query.filter(StockInfo.market_type == market_type.upper())
+        
+        # Order by market_cap descending (if available), or by symbol
+        # Note: This is a simplified version - in production, you'd want to order by actual trading volume
+        stocks = query.order_by(StockInfo.symbol.asc()).limit(limit).all()
+        
+        # If database has few stocks, fallback to common stocks
+        if len(stocks) < limit:
+            common_stocks = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'JPM', 'V', 'JNJ']
+            for symbol in common_stocks:
+                if len(stocks) >= limit:
+                    break
+                existing = any(s.symbol == symbol for s in stocks)
+                if not existing:
+                    # Try to fetch from yfinance
+                    try:
+                        import yfinance as yf
+                        ticker = yf.Ticker(symbol)
+                        info = ticker.info
+                        stock = StockInfo(
+                            symbol=symbol,
+                            name=info.get('longName', symbol),
+                            market_type='US',
+                            exchange=info.get('exchange', 'NASDAQ'),
+                            market_cap=info.get('marketCap', 0)
+                        )
+                        db.add(stock)
+                        stocks.append(stock)
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch stock info for {symbol}: {e}")
+                        pass
+            
+            try:
+                db.commit()
+            except Exception as e:
+                logger.warning(f"Failed to commit stock info: {e}")
+                db.rollback()
+        
+        # Convert to dict format for response
+        from schemas import StockInfoSchema
+        result = []
+        for stock in stocks[:limit]:
+            try:
+                result.append(StockInfoSchema.from_orm(stock))
+            except Exception as e:
+                logger.warning(f"Failed to serialize stock {stock.symbol}: {e}")
+                # Fallback to dict
+                result.append({
+                    'symbol': stock.symbol,
+                    'name': getattr(stock, 'name', stock.symbol),
+                    'market_type': getattr(stock, 'market_type', 'US'),
+                    'exchange': getattr(stock, 'exchange', None),
+                    'market_cap': getattr(stock, 'market_cap', 0)
+                })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to get popular stocks: {str(e)}", exc_info=True)
+        # Return default stocks on error
+        common_stocks = [
+            {'symbol': 'AAPL', 'name': 'Apple Inc.', 'market_type': 'US'},
+            {'symbol': 'MSFT', 'name': 'Microsoft Corporation', 'market_type': 'US'},
+            {'symbol': 'GOOGL', 'name': 'Alphabet Inc.', 'market_type': 'US'},
+            {'symbol': 'AMZN', 'name': 'Amazon.com Inc.', 'market_type': 'US'},
+            {'symbol': 'TSLA', 'name': 'Tesla Inc.', 'market_type': 'US'},
+        ]
+        if market_type:
+            common_stocks = [s for s in common_stocks if s['market_type'] == market_type.upper()]
+        return common_stocks[:limit]
 
 @app.get("/api/market/stocks/{symbol}/info", response_model=StockInfoSchema)
 async def get_stock_info(symbol: str, db: Session = Depends(get_db)):
