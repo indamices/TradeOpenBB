@@ -11,6 +11,7 @@ import AIModelSettings from './components/AIModelSettings';
 import PortfolioManager from './components/PortfolioManager';
 import DataSourceManager from './components/DataSourceManager';
 import StockPoolManager from './components/StockPoolManager';
+import HistoricalDataViewer from './components/HistoricalDataViewer';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -37,6 +38,8 @@ const App: React.FC = () => {
         return <AIModelSettings />;
       case 'data-sources':
         return <DataSourceManager />;
+      case 'historical-data':
+        return <HistoricalDataViewer />;
       case 'stock-pools':
         return <StockPoolManager selectedPoolId={null} onSelectPool={() => {}} mode="manager" />;
       default:

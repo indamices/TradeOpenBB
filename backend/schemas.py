@@ -451,6 +451,8 @@ class BacktestRecord(BacktestRecordBase):
     total_trades: Optional[int] = None
     total_return: Optional[float] = None
     full_result: Optional[Dict[str, Any]] = None
+    compare_with_indices: Optional[bool] = False
+    compare_items: Optional[List[str]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     
@@ -471,8 +473,10 @@ class ParameterOptimizationRequest(BaseModel):
 class ParameterOptimizationResult(BaseModel):
     best_parameters: Dict[str, Any]
     best_metric_value: float
-    best_result: Dict[str, Any]  # Best BacktestResult
-    all_results: List[Dict[str, Any]]  # All tested combinations with results
-    total_combinations: int
-    valid_combinations: int
     optimization_metric: str
+    results: List[Dict[str, Any]]  # List of {parameters: {...}, metrics: BacktestResult, ...}
+    total_combinations: int
+    # Optional fields for backward compatibility
+    best_result: Optional[Dict[str, Any]] = None  # Best BacktestResult (deprecated, use results[0])
+    all_results: Optional[List[Dict[str, Any]]] = None  # Deprecated, use results
+    valid_combinations: Optional[int] = None

@@ -119,6 +119,13 @@ export class TradingService {
     return apiClient.get<any>('/api/market/overview');
   }
 
+  async getHistoricalData(symbol: string, startDate: string, endDate: string): Promise<any[]> {
+    const params = new URLSearchParams();
+    params.append('start_date', startDate);
+    params.append('end_date', endDate);
+    return apiClient.get<any[]>(`/api/market/historical/${symbol}?${params.toString()}`);
+  }
+
   // Backtest methods
   async runBacktest(request: BacktestRequest, saveRecord: boolean = false): Promise<BacktestResult> {
     const params = new URLSearchParams();

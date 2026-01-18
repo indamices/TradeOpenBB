@@ -458,28 +458,33 @@ const ParameterOptimization: React.FC<ParameterOptimizationProps> = ({
                           {Object.entries(item.parameters).map(([k, v]) => `${k}:${v}`).join(', ')}
                         </td>
                         <td className="text-right py-2 px-3 text-slate-300">
-                          {item.sharpe_ratio?.toFixed(4) || '-'}
+                          {item.metrics?.sharpe_ratio?.toFixed(4) || item.sharpe_ratio?.toFixed(4) || '-'}
                         </td>
                         <td className="text-right py-2 px-3 text-slate-300">
-                          {item.total_return?.toFixed(2)}%
+                          {item.metrics?.total_return?.toFixed(2) || item.total_return?.toFixed(2)}%
                         </td>
                         <td className="text-right py-2 px-3 text-slate-300">
-                          {item.annualized_return?.toFixed(2)}%
+                          {item.metrics?.annualized_return?.toFixed(2) || item.annualized_return?.toFixed(2)}%
                         </td>
                         <td className="text-right py-2 px-3 text-slate-300">
-                          {item.max_drawdown?.toFixed(2)}%
+                          {item.metrics?.max_drawdown?.toFixed(2) || item.max_drawdown?.toFixed(2)}%
                         </td>
                         <td className="text-right py-2 px-3 text-slate-300">
-                          {item.win_rate?.toFixed(2)}%
+                          {item.metrics?.win_rate !== undefined 
+                            ? (item.metrics.win_rate * 100).toFixed(2)
+                            : item.win_rate !== undefined 
+                              ? (item.win_rate * 100).toFixed(2)
+                              : '-'
+                          }%
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              {result.results.length > 20 && (
+              {(result.results || []).length > 20 && (
                 <div className="text-center mt-2 text-slate-500 text-sm">
-                  显示前20条，共{result.results.length}条结果
+                  显示前20条，共{(result.results || []).length}条结果
                 </div>
               )}
             </div>

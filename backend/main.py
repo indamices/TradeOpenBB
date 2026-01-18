@@ -862,6 +862,66 @@ async def get_overview():
         logger.error(f"Failed to get market overview: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get market overview: {str(e)}")
 
+@app.get("/api/market/historical/{symbol}")
+async def get_historical_market_data(
+    symbol: str,
+    start_date: str = Query(..., description="Start date in YYYY-MM-DD format"),
+    end_date: str = Query(..., description="End date in YYYY-MM-DD format"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get historical market data for a symbol
+    
+    Query parameters:
+    - symbol: Stock symbol (e.g., 'AAPL')
+    - start_date: Start date in 'YYYY-MM-DD' format
+    - end_date: End date in 'YYYY-MM-DD' format
+    """
+    try:
+        from services.data_service import DataService
+        
+        async with DataService(db=db) as data_service:
+            data = await data_service.get_historical_data(
+                symbol.upper(),
+                start_date,
+                end_date,
+                use_cache=True
+            )
+            
+            if data is None or data.empty:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"No historical data found for {symbol} in the specified date range"
+                )
+            
+            # Convert DataFrame to JSON-serializable format
+            import numpy as np
+            import pandas as pd
+            from utils.json_serializer import sanitize_for_json
+            
+            # Reset index to make Date a column
+            data_reset = data.reset_index()
+            
+            # Clean data
+            data_clean = data_reset.replace([np.inf, -np.inf], np.nan)
+            data_clean = data_clean.where(pd.notnull(data_clean), None)
+            
+            # Convert to dict
+            result = data_clean.to_dict(orient='records')
+            
+            # Sanitize for JSON
+            result = sanitize_for_json(result)
+            
+            return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get historical data for {symbol}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to get historical data: {str(e)}"
+        )
+
 # Backtest endpoints
 @app.post("/api/backtest", response_model=BacktestResult)
 async def run_backtest_endpoint(
@@ -982,13 +1042,40 @@ async def optimize_strategy_parameters(
         from services.parameter_optimizer import ParameterOptimizer
         
         optimizer = ParameterOptimizer(db)
-        result = await optimizer.optimize_parameters(
+        optimization_result = await optimizer.optimize_parameters(
             strategy_id=request.strategy_id,
             optimization_request=request,
             optimization_metric=request.optimization_metric
         )
         
-        return ParameterOptimizationResult(**result)
+        # Convert result format to match schema
+        # Backend returns: {best_parameters, best_metric_value, best_result, all_results, ...}
+        # Schema expects: {best_parameters, best_metric_value, optimization_metric, results, total_combinations}
+        formatted_results = []
+        for item in optimization_result.get('all_results', []):
+            if 'error' not in item:
+                # Extract metrics from result dict
+                result_dict = item.get('result', {})
+                formatted_results.append({
+                    'parameters': item.get('parameters', {}),
+                    'metrics': result_dict,  # Full backtest result
+                    # Also include metrics at top level for compatibility
+                    'sharpe_ratio': result_dict.get('sharpe_ratio'),
+                    'sortino_ratio': result_dict.get('sortino_ratio'),
+                    'annualized_return': result_dict.get('annualized_return'),
+                    'total_return': result_dict.get('total_return'),
+                    'max_drawdown': result_dict.get('max_drawdown'),
+                    'win_rate': result_dict.get('win_rate'),
+                    'total_trades': result_dict.get('total_trades')
+                })
+        
+        return ParameterOptimizationResult(
+            best_parameters=optimization_result.get('best_parameters', {}),
+            best_metric_value=optimization_result.get('best_metric_value', 0),
+            optimization_metric=optimization_result.get('optimization_metric', 'sharpe_ratio'),
+            results=formatted_results,
+            total_combinations=optimization_result.get('total_combinations', 0)
+        )
     except Exception as e:
         logger.error(f"Parameter optimization failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Parameter optimization failed: {str(e)}")
@@ -2058,9 +2145,47 @@ async def get_backtest_records(
             query = query.filter(BacktestRecord.strategy_id == strategy_id)
         
         records = query.order_by(BacktestRecord.created_at.desc()).offset(offset).limit(limit).all()
-        return records
+        
+        # Convert to dict and sanitize for JSON serialization
+        from utils.json_serializer import sanitize_for_json
+        from schemas import BacktestRecord as BacktestRecordSchema
+        
+        result = []
+        for record in records:
+            try:
+                # Convert SQLAlchemy model to Pydantic schema
+                record_dict = {
+                    'id': record.id,
+                    'name': record.name,
+                    'strategy_id': record.strategy_id,
+                    'strategy_name': record.strategy_name,
+                    'start_date': record.start_date.isoformat() if record.start_date else None,
+                    'end_date': record.end_date.isoformat() if record.end_date else None,
+                    'initial_cash': record.initial_cash,
+                    'symbols': record.symbols if isinstance(record.symbols, list) else [],
+                    'sharpe_ratio': record.sharpe_ratio,
+                    'sortino_ratio': record.sortino_ratio,
+                    'annualized_return': record.annualized_return,
+                    'max_drawdown': record.max_drawdown,
+                    'win_rate': record.win_rate,
+                    'total_trades': record.total_trades,
+                    'total_return': record.total_return,
+                    'full_result': sanitize_for_json(record.full_result) if record.full_result else None,
+                    'compare_with_indices': getattr(record, 'compare_with_indices', False),
+                    'compare_items': getattr(record, 'compare_items', None),
+                    'created_at': record.created_at.isoformat() if record.created_at else None,
+                    'updated_at': record.updated_at.isoformat() if record.updated_at else None,
+                }
+                # Validate with Pydantic schema
+                result.append(BacktestRecordSchema(**record_dict))
+            except Exception as e:
+                logger.error(f"Failed to serialize backtest record {record.id}: {str(e)}")
+                # Skip invalid records but continue processing others
+                continue
+        
+        return result
     except Exception as e:
-        logger.error(f"Failed to get backtest records: {str(e)}")
+        logger.error(f"Failed to get backtest records: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get backtest records: {str(e)}")
 
 @app.get("/api/backtest/records/{record_id}", response_model=BacktestRecord)

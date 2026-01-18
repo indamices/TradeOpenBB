@@ -30,6 +30,7 @@ const BacktestLab: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAIAnalysis, setShowAIAnalysis] = useState(false);
 
   useEffect(() => {
     loadStrategies();
