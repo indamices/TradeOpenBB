@@ -88,16 +88,15 @@ else:
 async def test_backtest_engine_basic(db_session, sample_strategy):
     """Test basic backtest execution"""
     # Mock data fetching to avoid external API calls
-    mock_data = Mock()
-    mock_data.index = [datetime.now() - timedelta(days=i) for i in range(100, 0, -1)]
-    mock_data.loc[:, 'Close'] = [100.0 + i * 0.1 for i in range(100)]
-    mock_data.loc[:, 'Open'] = mock_data['Close'] * 0.99
-    mock_data.loc[:, 'High'] = mock_data['Close'] * 1.01
-    mock_data.loc[:, 'Low'] = mock_data['Close'] * 0.98
-    mock_data.loc[:, 'Volume'] = [1000000] * 100
-    
     import pandas as pd
-    mock_df = pd.DataFrame(mock_data)
+    dates = pd.date_range(start='2023-01-01', end='2023-12-31', freq='D')
+    mock_df = pd.DataFrame({
+        'Open': [100.0 + i * 0.1 for i in range(len(dates))],
+        'High': [101.0 + i * 0.1 for i in range(len(dates))],
+        'Low': [99.0 + i * 0.1 for i in range(len(dates))],
+        'Close': [100.5 + i * 0.1 for i in range(len(dates))],
+        'Volume': [1000000] * len(dates)
+    }, index=dates)
     
     # Create backtest request
     end_date = datetime.now().strftime('%Y-%m-%d')

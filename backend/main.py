@@ -2230,12 +2230,14 @@ async def get_backtest_records(
 ):
     """获取回测记录列表"""
     try:
-        query = db.query(BacktestRecord)
+        # Import model explicitly to avoid conflict with schema
+        from models import BacktestRecord as BacktestRecordModel
+        query = db.query(BacktestRecordModel)
         
         if strategy_id:
-            query = query.filter(BacktestRecord.strategy_id == strategy_id)
+            query = query.filter(BacktestRecordModel.strategy_id == strategy_id)
         
-        records = query.order_by(BacktestRecord.created_at.desc()).offset(offset).limit(limit).all()
+        records = query.order_by(BacktestRecordModel.created_at.desc()).offset(offset).limit(limit).all()
         
         # Convert to dict and sanitize for JSON serialization
         from utils.json_serializer import sanitize_for_json
@@ -2282,7 +2284,8 @@ async def get_backtest_records(
 @app.get("/api/backtest/records/{record_id}", response_model=BacktestRecord)
 async def get_backtest_record(record_id: int, db: Session = Depends(get_db)):
     """获取单个回测记录"""
-    record = db.query(BacktestRecord).filter(BacktestRecord.id == record_id).first()
+    from models import BacktestRecord as BacktestRecordModel
+    record = db.query(BacktestRecordModel).filter(BacktestRecordModel.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Backtest record not found")
     return record

@@ -213,9 +213,10 @@ class TestBacktestEngine:
         expected_pnl = (sell_price - buy_price) * buy_qty
         
         # Since sell_price > buy_price, this should be a winning trade
-        # win_rate should be 100% since there is one round-trip trade and pnl > 0
+        # win_rate should be 100% (1.0 as decimal) since there is one round-trip trade and pnl > 0
         assert expected_pnl > 0, "Expected profitable trade"
-        assert metrics['win_rate'] == pytest.approx(100.0, rel=1e-3)
+        # win_rate is now decimal (1.0 = 100%), not percentage
+        assert metrics['win_rate'] == pytest.approx(1.0, rel=1e-3)
         
         # Ensure metrics numeric values are floats and make basic sanity checks
         assert isinstance(metrics['total_return'], float)
