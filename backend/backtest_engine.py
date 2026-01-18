@@ -382,22 +382,29 @@ class BacktestEngine:
         
         return result
 
-async def run_backtest(request: BacktestRequest, db: Session) -> BacktestResult:
+async def run_backtest(request: BacktestRequest, db: Session, strategy: Optional[Strategy] = None) -> BacktestResult:
     """
     Run backtest for a strategy
     
     Args:
         request: BacktestRequest with strategy_id, dates, symbols, etc.
         db: Database session
+        strategy: Optional Strategy object to use instead of querying from database
+                  (useful for parameter optimization where strategy code is modified)
     
     Returns:
         BacktestResult with performance metrics
     """
     try:
-        # Get strategy from database
-        strategy = db.query(Strategy).filter(Strategy.id == request.strategy_id).first()
-        if not strategy:
-            raise ValueError(f"Strategy {request.strategy_id} not found")
+        # Get strategy from database if not provided
+        if strategy is None:
+            strategy = db.query(Strategy).filter(Strategy.id == request.strategy_id).first()
+            if not strategy:
+                raise ValueError(f"Strategy {request.strategy_id} not found")
+        else:
+            # Verify strategy ID matches request
+            if strategy.id != request.strategy_id:
+                logger.warning(f"Strategy ID mismatch: provided {strategy.id}, request {request.strategy_id}")
         
         # Initialize backtest engine
         engine = BacktestEngine(initial_cash=request.initial_cash)

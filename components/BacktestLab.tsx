@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { 
   Play, Loader2, TrendingUp, TrendingDown, AlertCircle, 
-  BarChart3, Activity, Target, DollarSign 
+  BarChart3, Activity, Target, DollarSign, Sparkles 
 } from 'lucide-react';
 import { Strategy, BacktestRequest, BacktestResult } from '../types';
 import { tradingService } from '../services/tradingService';
@@ -14,6 +14,7 @@ import StockPoolManager from './StockPoolManager';
 import TimeRangeSelector from './TimeRangeSelector';
 import BacktestSymbolList from './BacktestSymbolList';
 import BacktestComparison from './BacktestComparison';
+import AIAnalysis from './AIAnalysis';
 
 const BacktestLab: React.FC = () => {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -340,6 +341,46 @@ const BacktestLab: React.FC = () => {
       {/* Results */}
       {result && (
         <div className="space-y-6">
+          {/* Result Tabs */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="flex items-center gap-4 border-b border-slate-800">
+              <button
+                onClick={() => setShowAIAnalysis(false)}
+                className={`px-4 py-2 font-medium transition-colors ${
+                  !showAIAnalysis
+                    ? 'text-emerald-400 border-b-2 border-emerald-400'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                <BarChart3 size={18} className="inline mr-2" />
+                回测结果
+              </button>
+              <button
+                onClick={() => setShowAIAnalysis(true)}
+                className={`px-4 py-2 font-medium transition-colors ${
+                  showAIAnalysis
+                    ? 'text-purple-400 border-b-2 border-purple-400'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                <Sparkles size={18} className="inline mr-2" />
+                AI分析
+              </button>
+            </div>
+          </div>
+
+          {/* AI Analysis Tab */}
+          {showAIAnalysis && (
+            <AIAnalysis
+              backtestResult={result}
+              strategyId={selectedStrategy!}
+              strategy={strategies.find(s => s.id === selectedStrategy) || undefined}
+            />
+          )}
+
+          {/* Backtest Results Tab */}
+          {!showAIAnalysis && (
+            <>
           {/* Performance Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
@@ -666,6 +707,8 @@ const BacktestLab: React.FC = () => {
                 </table>
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
       )}

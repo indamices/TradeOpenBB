@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import BacktestLab from './components/BacktestLab';
+import BacktestRecords from './components/BacktestRecords';
+import ParameterOptimization from './components/ParameterOptimization';
 import AIChatAssistant from './components/AIChatAssistant';
 import StrategyLab from './components/StrategyLab';
 import StrategyManager from './components/StrategyManager';
@@ -19,6 +21,10 @@ const App: React.FC = () => {
         return <Dashboard />;
       case 'backtest':
         return <BacktestLab />;
+      case 'backtest-records':
+        return <BacktestRecords />;
+      case 'parameter-optimization':
+        return <ParameterOptimization />;
       case 'ai-chat':
         return <AIChatAssistant />;
       case 'strategy':

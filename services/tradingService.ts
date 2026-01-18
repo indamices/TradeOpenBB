@@ -1,5 +1,5 @@
 import { apiClient, ApiError } from './apiClient';
-import { Portfolio, Position, Order, Strategy, MarketQuote, StrategyGenerationRequest, StrategyGenerationResponse, BacktestRequest, BacktestResult, SetStrategyActiveRequest, BatchSetActiveRequest, StrategyUpdate } from '../types';
+import { Portfolio, Position, Order, Strategy, MarketQuote, StrategyGenerationRequest, StrategyGenerationResponse, BacktestRequest, BacktestResult, SetStrategyActiveRequest, BatchSetActiveRequest, StrategyUpdate, BacktestRecord, BacktestRecordCreate, BacktestRecordUpdate, ParameterOptimizationRequest, ParameterOptimizationResult, AIStrategyAnalysisRequest, AIStrategyAnalysisResponse } from '../types';
 
 export class TradingService {
   // Portfolio methods
@@ -120,8 +120,72 @@ export class TradingService {
   }
 
   // Backtest methods
-  async runBacktest(request: BacktestRequest): Promise<BacktestResult> {
-    return apiClient.post<BacktestResult>('/api/backtest', request);
+  async runBacktest(request: BacktestRequest, saveRecord: boolean = false): Promise<BacktestResult> {
+    const params = new URLSearchParams();
+    if (saveRecord) {
+      params.append('save_record', 'true');
+    }
+    const url = `/api/backtest${params.toString() ? `?${params.toString()}` : ''}`;
+    return apiClient.post<BacktestResult>(url, request);
+  }
+
+  // Backtest Record methods
+  async getBacktestRecords(strategyId?: number, limit: number = 50, offset: number = 0): Promise<BacktestRecord[]> {
+    const params = new URLSearchParams();
+    if (strategyId) {
+      params.append('strategy_id', strategyId.toString());
+    }
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+    return apiClient.get<BacktestRecord[]>(`/api/backtest/records?${params.toString()}`);
+  }
+
+  async getBacktestRecord(recordId: number): Promise<BacktestRecord> {
+    return apiClient.get<BacktestRecord>(`/api/backtest/records/${recordId}`);
+  }
+
+  async updateBacktestRecord(recordId: number, update: BacktestRecordUpdate): Promise<BacktestRecord> {
+    return apiClient.put<BacktestRecord>(`/api/backtest/records/${recordId}`, update);
+  }
+
+  async deleteBacktestRecord(recordId: number): Promise<void> {
+    return apiClient.delete<void>(`/api/backtest/records/${recordId}`);
+  }
+
+  async exportBacktestRecordCSV(recordId: number): Promise<Blob> {
+    const response = await fetch(`${apiClient['baseURL']}/api/backtest/records/${recordId}/export/csv`, {
+      method: 'GET',
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+      throw { detail: errorData.detail || response.statusText, status: response.status } as ApiError;
+    }
+    return response.blob();
+  }
+
+  async exportBacktestRecordExcel(recordId: number): Promise<Blob> {
+    const response = await fetch(`${apiClient['baseURL']}/api/backtest/records/${recordId}/export/excel`, {
+      method: 'GET',
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+      throw { detail: errorData.detail || response.statusText, status: response.status } as ApiError;
+    }
+    return response.blob();
+  }
+
+  // Parameter Optimization methods
+  async optimizeStrategyParameters(request: ParameterOptimizationRequest): Promise<ParameterOptimizationResult> {
+    return apiClient.post<ParameterOptimizationResult>('/api/backtest/optimize', request);
+  }
+
+  // AI Strategy Analysis methods
+  async analyzeBacktestResult(request: AIStrategyAnalysisRequest): Promise<AIStrategyAnalysisResponse> {
+    const params = new URLSearchParams();
+    params.append('strategy_id', request.strategy_id.toString());
+    return apiClient.post<AIStrategyAnalysisResponse>(`/api/backtest/analyze?${params.toString()}`, {
+      backtest_result: request.backtest_result
+    });
   }
 }
 

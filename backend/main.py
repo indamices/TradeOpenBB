@@ -10,7 +10,7 @@ except ImportError:
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from typing import List, Optional, Dict
@@ -19,7 +19,7 @@ import time
 
 # Use absolute imports for Docker deployment
 from database import get_db, init_db
-from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base, StockPool, StockInfo, Conversation, ConversationMessage, ChatStrategy, BacktestSymbolList, DataSourceConfig
+from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base, StockPool, StockInfo, Conversation, ConversationMessage, ChatStrategy, BacktestSymbolList, DataSourceConfig, BacktestRecord
 from schemas import (
     Portfolio as PortfolioSchema, PortfolioCreate, PortfolioUpdate,
     Position as PositionSchema, PositionCreate, PositionUpdate,
@@ -33,7 +33,8 @@ from schemas import (
     Conversation as ConversationSchema, ConversationMessage as ConversationMessageSchema, ChatStrategy as ChatStrategySchema, ChatStrategyCreate, SaveStrategyRequest,
     DataSourceConfigCreate, DataSourceConfigUpdate, DataSourceConfigResponse,
     SymbolList, SymbolListCreate, SymbolListUpdate, SetStrategyActiveRequest, BatchSetActiveRequest,
-    DataSourceConfigCreate, DataSourceConfigUpdate, DataSourceConfigResponse
+    BacktestRecord, BacktestRecordCreate, BacktestRecordUpdate,
+    ParameterOptimizationRequest, ParameterOptimizationResult
 )
 from market_service import get_realtime_quote, get_multiple_quotes, get_market_overview, get_technical_indicators
 from ai_service_factory import generate_strategy, chat_with_ai
@@ -863,7 +864,11 @@ async def get_overview():
 
 # Backtest endpoints
 @app.post("/api/backtest", response_model=BacktestResult)
-async def run_backtest_endpoint(request: BacktestRequest, db: Session = Depends(get_db)):
+async def run_backtest_endpoint(
+    request: BacktestRequest, 
+    db: Session = Depends(get_db),
+    save_record: bool = Query(False, description="是否保存回测记录")
+):
     """Run backtest for a strategy"""
     try:
         result = await run_backtest(request, db)
@@ -924,10 +929,99 @@ async def run_backtest_endpoint(request: BacktestRequest, db: Session = Depends(
             except Exception as e:
                 logger.warning(f"Strategy comparison failed: {str(e)}")
         
+        # If requested, save backtest record
+        if save_record:
+            try:
+                strategy = db.query(Strategy).filter(Strategy.id == request.strategy_id).first()
+                if strategy:
+                    from datetime import datetime as dt
+                    
+                    # Convert date strings to date objects
+                    start_dt = dt.strptime(request.start_date, '%Y-%m-%d').date()
+                    end_dt = dt.strptime(request.end_date, '%Y-%m-%d').date()
+                    
+                    backtest_record = BacktestRecord(
+                        strategy_id=request.strategy_id,
+                        strategy_name=strategy.name,
+                        start_date=start_dt,
+                        end_date=end_dt,
+                        initial_cash=request.initial_cash,
+                        symbols=request.symbols,
+                        sharpe_ratio=result.sharpe_ratio,
+                        sortino_ratio=result.sortino_ratio,
+                        annualized_return=result.annualized_return,
+                        max_drawdown=result.max_drawdown,
+                        win_rate=result.win_rate,
+                        total_trades=result.total_trades,
+                        total_return=result.total_return,
+                        compare_with_indices=request.compare_with_indices or False,
+                        compare_items=request.compare_items,
+                        full_result=result.model_dump()  # Save complete result as JSON
+                    )
+                    
+                    db.add(backtest_record)
+                    db.commit()
+                    db.refresh(backtest_record)
+                    logger.info(f"Backtest record saved with ID: {backtest_record.id}")
+            except Exception as e:
+                logger.error(f"Failed to save backtest record: {str(e)}")
+                # Don't interrupt the backtest flow, just log the error
+        
         return result
     except Exception as e:
         logger.error(f"Backtest failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
+
+@app.post("/api/backtest/optimize", response_model=ParameterOptimizationResult)
+async def optimize_strategy_parameters(
+    request: ParameterOptimizationRequest,
+    db: Session = Depends(get_db)
+):
+    """Optimize strategy parameters using grid search"""
+    try:
+        from services.parameter_optimizer import ParameterOptimizer
+        
+        optimizer = ParameterOptimizer(db)
+        result = await optimizer.optimize_parameters(
+            strategy_id=request.strategy_id,
+            optimization_request=request,
+            optimization_metric=request.optimization_metric
+        )
+        
+        return ParameterOptimizationResult(**result)
+    except Exception as e:
+        logger.error(f"Parameter optimization failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Parameter optimization failed: {str(e)}")
+
+@app.post("/api/backtest/analyze")
+async def analyze_backtest_result(
+    backtest_result: BacktestResult,
+    strategy_id: int,
+    db: Session = Depends(get_db)
+):
+    """Analyze backtest result using AI and provide suggestions"""
+    try:
+        from services.strategy_analyzer import StrategyAnalyzer
+        from models import Strategy
+        
+        # Get strategy
+        strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
+        if not strategy:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        
+        analyzer = StrategyAnalyzer(db)
+        result = await analyzer.analyze_backtest_result(
+            backtest_result=backtest_result.model_dump() if hasattr(backtest_result, 'model_dump') else backtest_result.__dict__,
+            strategy_code=strategy.logic_code,
+            strategy_name=strategy.name
+        )
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Strategy analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Strategy analysis failed: {str(e)}")
 
 # AI Model Config endpoints
 @app.get("/api/ai-models", response_model=List[AIModelConfigResponse])
@@ -1948,6 +2042,365 @@ async def test_data_source_connection(source_id: int, db: Session = Depends(get_
         logger.error(f"Failed to test data source: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to test data source: {str(e)}")
 
+# Backtest Record endpoints
+@app.get("/api/backtest/records", response_model=List[BacktestRecord])
+async def get_backtest_records(
+    strategy_id: Optional[int] = None,
+    limit: int = Query(50, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db)
+):
+    """获取回测记录列表"""
+    try:
+        query = db.query(BacktestRecord)
+        
+        if strategy_id:
+            query = query.filter(BacktestRecord.strategy_id == strategy_id)
+        
+        records = query.order_by(BacktestRecord.created_at.desc()).offset(offset).limit(limit).all()
+        return records
+    except Exception as e:
+        logger.error(f"Failed to get backtest records: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get backtest records: {str(e)}")
+
+@app.get("/api/backtest/records/{record_id}", response_model=BacktestRecord)
+async def get_backtest_record(record_id: int, db: Session = Depends(get_db)):
+    """获取单个回测记录"""
+    record = db.query(BacktestRecord).filter(BacktestRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Backtest record not found")
+    return record
+
+@app.put("/api/backtest/records/{record_id}", response_model=BacktestRecord)
+async def update_backtest_record(
+    record_id: int,
+    update: BacktestRecordUpdate,
+    db: Session = Depends(get_db)
+):
+    """更新回测记录（主要是更新名称）"""
+    record = db.query(BacktestRecord).filter(BacktestRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Backtest record not found")
+    
+    if update.name is not None:
+        record.name = update.name
+    
+    db.commit()
+    db.refresh(record)
+    return record
+
+@app.delete("/api/backtest/records/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_backtest_record(record_id: int, db: Session = Depends(get_db)):
+    """删除回测记录"""
+    record = db.query(BacktestRecord).filter(BacktestRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Backtest record not found")
+    
+    db.delete(record)
+    db.commit()
+    return None
+
+@app.get("/api/backtest/records/{record_id}/export/csv")
+async def export_backtest_record_csv(record_id: int, db: Session = Depends(get_db)):
+    """导出回测记录为CSV格式"""
+    try:
+        record = db.query(BacktestRecord).filter(BacktestRecord.id == record_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="Backtest record not found")
+        
+        import io
+        import csv
+        
+        # 创建CSV内容
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # 写入基本信息
+        writer.writerow(['回测记录导出'])
+        writer.writerow([])
+        writer.writerow(['基本信息'])
+        writer.writerow(['ID', record.id])
+        writer.writerow(['名称', record.name or f"回测_{record.id}"])
+        writer.writerow(['策略ID', record.strategy_id])
+        writer.writerow(['策略名称', record.strategy_name])
+        writer.writerow(['开始日期', record.start_date])
+        writer.writerow(['结束日期', record.end_date])
+        writer.writerow(['初始资金', record.initial_cash])
+        writer.writerow(['股票列表', ', '.join(record.symbols)])
+        writer.writerow(['创建时间', record.created_at])
+        writer.writerow([])
+        
+        # 写入指标
+        writer.writerow(['回测指标'])
+        writer.writerow(['夏普比率', record.sharpe_ratio or 'N/A'])
+        writer.writerow(['索提诺比率', record.sortino_ratio or 'N/A'])
+        writer.writerow(['年化收益率', f"{record.annualized_return:.2f}%" if record.annualized_return else 'N/A'])
+        writer.writerow(['最大回撤', f"{record.max_drawdown:.2f}%" if record.max_drawdown else 'N/A'])
+        writer.writerow(['胜率', f"{record.win_rate:.2f}%" if record.win_rate else 'N/A'])
+        writer.writerow(['总交易次数', record.total_trades or 0])
+        writer.writerow(['总收益率', f"{record.total_return:.2f}%" if record.total_return else 'N/A'])
+        writer.writerow([])
+        
+        # 如果有完整结果，导出详细数据
+        if record.full_result:
+            # 导出交易记录
+            if 'trades' in record.full_result and record.full_result['trades']:
+                writer.writerow(['交易记录'])
+                writer.writerow(['日期', '股票', '方向', '价格', '数量', '佣金', '盈亏', '盈亏%', '触发原因'])
+                for trade in record.full_result['trades']:
+                    writer.writerow([
+                        trade.get('date', ''),
+                        trade.get('symbol', ''),
+                        trade.get('side', ''),
+                        trade.get('price', 0),
+                        trade.get('quantity', 0),
+                        trade.get('commission', 0),
+                        trade.get('pnl', ''),
+                        trade.get('pnl_percent', ''),
+                        trade.get('trigger_reason', '')
+                    ])
+                writer.writerow([])
+            
+            # 导出权益曲线
+            if 'equity_curve' in record.full_result and record.full_result['equity_curve']:
+                writer.writerow(['权益曲线'])
+                writer.writerow(['日期', '权益价值'])
+                for point in record.full_result['equity_curve']:
+                    writer.writerow([
+                        point.get('date', ''),
+                        point.get('value', 0)
+                    ])
+                writer.writerow([])
+            
+            # 导出按股票统计
+            if 'per_stock_performance' in record.full_result and record.full_result['per_stock_performance']:
+                writer.writerow(['按股票统计'])
+                writer.writerow(['股票', '总交易次数', '买入次数', '卖出次数', '买入数量', '卖出数量', 
+                               '最终持仓', '买入成本', '卖出收入', '佣金', '已实现盈亏', '收益率%'])
+                for stock in record.full_result['per_stock_performance']:
+                    writer.writerow([
+                        stock.get('symbol', ''),
+                        stock.get('total_trades', 0),
+                        stock.get('buy_trades_count', 0),
+                        stock.get('sell_trades_count', 0),
+                        stock.get('total_quantity_bought', 0),
+                        stock.get('total_quantity_sold', 0),
+                        stock.get('final_position', 0),
+                        stock.get('total_buy_cost', 0),
+                        stock.get('total_sell_revenue', 0),
+                        stock.get('total_commission', 0),
+                        stock.get('realized_pnl', 0),
+                        f"{stock.get('return_percent', 0):.2f}%" if stock.get('return_percent') else '0%'
+                    ])
+        
+        output.seek(0)
+        filename = f"backtest_{record_id}_{record.start_date}_{record.end_date}.csv"
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv; charset=utf-8-sig",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to export CSV: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to export CSV: {str(e)}")
+
+@app.get("/api/backtest/records/{record_id}/export/excel")
+async def export_backtest_record_excel(record_id: int, db: Session = Depends(get_db)):
+    """导出回测记录为Excel格式"""
+    try:
+        # 检查是否安装了openpyxl
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment
+            from openpyxl.utils import get_column_letter
+        except ImportError:
+            raise HTTPException(
+                status_code=500, 
+                detail="Excel export requires openpyxl. Install with: pip install openpyxl"
+            )
+        
+        record = db.query(BacktestRecord).filter(BacktestRecord.id == record_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="Backtest record not found")
+        
+        import io
+        
+        # 创建Excel工作簿
+        wb = openpyxl.Workbook()
+        
+        # 基本信息工作表
+        ws_info = wb.active
+        ws_info.title = "基本信息"
+        
+        # 标题样式
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        
+        # 写入基本信息
+        ws_info.append(['回测记录导出'])
+        ws_info.merge_cells('A1:B1')
+        ws_info['A1'].font = Font(bold=True, size=14)
+        
+        row = 3
+        info_data = [
+            ['ID', record.id],
+            ['名称', record.name or f"回测_{record.id}"],
+            ['策略ID', record.strategy_id],
+            ['策略名称', record.strategy_name],
+            ['开始日期', str(record.start_date)],
+            ['结束日期', str(record.end_date)],
+            ['初始资金', record.initial_cash],
+            ['股票列表', ', '.join(record.symbols)],
+            ['创建时间', str(record.created_at)]
+        ]
+        for key, value in info_data:
+            ws_info.cell(row=row, column=1, value=key).font = Font(bold=True)
+            ws_info.cell(row=row, column=2, value=value)
+            row += 1
+        
+        row += 1
+        # 写入指标
+        ws_info.append([])
+        row += 1
+        ws_info.append(['回测指标'])
+        ws_info.merge_cells(f'A{row}:B{row}')
+        ws_info[f'A{row}'].fill = header_fill
+        ws_info[f'A{row}'].font = header_font
+        row += 1
+        
+        metrics_data = [
+            ['夏普比率', record.sharpe_ratio],
+            ['索提诺比率', record.sortino_ratio],
+            ['年化收益率', f"{record.annualized_return:.2f}%" if record.annualized_return else 'N/A'],
+            ['最大回撤', f"{record.max_drawdown:.2f}%" if record.max_drawdown else 'N/A'],
+            ['胜率', f"{record.win_rate:.2f}%" if record.win_rate else 'N/A'],
+            ['总交易次数', record.total_trades or 0],
+            ['总收益率', f"{record.total_return:.2f}%" if record.total_return else 'N/A']
+        ]
+        for key, value in metrics_data:
+            ws_info.cell(row=row, column=1, value=key).font = Font(bold=True)
+            ws_info.cell(row=row, column=2, value=value)
+            row += 1
+        
+        # 自动调整列宽
+        ws_info.column_dimensions['A'].width = 15
+        ws_info.column_dimensions['B'].width = 30
+        
+        # 如果有完整结果，创建详细工作表
+        if record.full_result:
+            # 交易记录工作表
+            if 'trades' in record.full_result and record.full_result['trades']:
+                ws_trades = wb.create_sheet("交易记录")
+                headers = ['日期', '股票', '方向', '价格', '数量', '佣金', '盈亏', '盈亏%', '触发原因']
+                ws_trades.append(headers)
+                
+                # 设置标题样式
+                for cell in ws_trades[1]:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(horizontal='center')
+                
+                for trade in record.full_result['trades']:
+                    ws_trades.append([
+                        trade.get('date', ''),
+                        trade.get('symbol', ''),
+                        trade.get('side', ''),
+                        trade.get('price', 0),
+                        trade.get('quantity', 0),
+                        trade.get('commission', 0),
+                        trade.get('pnl', ''),
+                        trade.get('pnl_percent', ''),
+                        trade.get('trigger_reason', '')
+                    ])
+                
+                # 自动调整列宽
+                for column in ws_trades.columns:
+                    max_length = 0
+                    column_letter = get_column_letter(column[0].column)
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    ws_trades.column_dimensions[column_letter].width = min(max_length + 2, 50)
+            
+            # 权益曲线工作表
+            if 'equity_curve' in record.full_result and record.full_result['equity_curve']:
+                ws_equity = wb.create_sheet("权益曲线")
+                ws_equity.append(['日期', '权益价值'])
+                for cell in ws_equity[1]:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(horizontal='center')
+                
+                for point in record.full_result['equity_curve']:
+                    ws_equity.append([
+                        point.get('date', ''),
+                        point.get('value', 0)
+                    ])
+            
+            # 按股票统计工作表
+            if 'per_stock_performance' in record.full_result and record.full_result['per_stock_performance']:
+                ws_stocks = wb.create_sheet("按股票统计")
+                headers = ['股票', '总交易次数', '买入次数', '卖出次数', '买入数量', '卖出数量', 
+                          '最终持仓', '买入成本', '卖出收入', '佣金', '已实现盈亏', '收益率%']
+                ws_stocks.append(headers)
+                
+                for cell in ws_stocks[1]:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(horizontal='center')
+                
+                for stock in record.full_result['per_stock_performance']:
+                    ws_stocks.append([
+                        stock.get('symbol', ''),
+                        stock.get('total_trades', 0),
+                        stock.get('buy_trades_count', 0),
+                        stock.get('sell_trades_count', 0),
+                        stock.get('total_quantity_bought', 0),
+                        stock.get('total_quantity_sold', 0),
+                        stock.get('final_position', 0),
+                        stock.get('total_buy_cost', 0),
+                        stock.get('total_sell_revenue', 0),
+                        stock.get('total_commission', 0),
+                        stock.get('realized_pnl', 0),
+                        f"{stock.get('return_percent', 0):.2f}%" if stock.get('return_percent') else '0%'
+                    ])
+                
+                # 自动调整列宽
+                for column in ws_stocks.columns:
+                    max_length = 0
+                    column_letter = get_column_letter(column[0].column)
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    ws_stocks.column_dimensions[column_letter].width = min(max_length + 2, 20)
+        
+        # 保存到内存
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        filename = f"backtest_{record_id}_{record.start_date}_{record.end_date}.xlsx"
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to export Excel: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to export Excel: {str(e)}")
+
 @app.get("/api/data-sources/available")
 async def get_available_data_sources():
     """Get list of available data sources (for reference)"""
@@ -2020,6 +2473,18 @@ async def get_available_data_sources():
                 "rate_limit": 50,
                 "requires_api_key": True,
                 "api_key_url": "https://data.nasdaq.com/"
+            },
+            {
+                "name": "富途牛牛 (Futu)",
+                "provider": "futu",
+                "source_type": "free",
+                "description": "富途牛牛OpenAPI，支持港股、美股、A股。需要安装OpenD客户端并登录富途账户。提供资金流向等高级数据。",
+                "supports_markets": ["US", "HK", "CN"],
+                "rate_limit": None,
+                "requires_api_key": False,
+                "requires_opend": True,
+                "api_doc_url": "https://openapi.futunn.com/",
+                "note": "需要安装OpenD客户端并登录富途账户"
             }
         ]
     }

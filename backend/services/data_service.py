@@ -18,10 +18,14 @@ from .rate_limiter import rate_limiter
 try:
     from ..models import MarketData, DataSyncLog
     from ..openbb_service import openbb_service
+    from ..alpha_vantage_service import alpha_vantage_service
+    from ..futu_service import get_futu_service
     from ..database import SessionLocal
 except ImportError:
     from models import MarketData, DataSyncLog
     from openbb_service import openbb_service
+    from alpha_vantage_service import alpha_vantage_service
+    from futu_service import get_futu_service
     from database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -228,6 +232,20 @@ class DataService:
                             data = openbb_service.get_stock_data(symbol, start_date, end_date)
                             if data is not None and not data.empty:
                                 return data
+                        elif db_source.provider.lower() == 'alphavantage':
+                            if alpha_vantage_service.is_available():
+                                data = alpha_vantage_service.get_stock_data(symbol, start_date, end_date)
+                                if data is not None and not data.empty:
+                                    return data
+                        elif db_source.provider.lower() == 'futu':
+                            futu_svc = get_futu_service()
+                            if futu_svc:
+                                try:
+                                    data = futu_svc.get_stock_data(symbol, start_date, end_date)
+                                    if data is not None and not data.empty:
+                                        return data
+                                except Exception as e:
+                                    logger.warning(f"Futu service failed: {e}")
                 except Exception as e:
                     logger.warning(f"Failed to use specified data source {source_to_use}: {e}")
             
@@ -246,21 +264,59 @@ class DataService:
                             if data is not None and not data.empty:
                                 logger.info(f"Successfully fetched data using {db_source.name}")
                                 return data
+                        elif db_source.provider and db_source.provider.lower() == 'alphavantage':
+                            if alpha_vantage_service.is_available():
+                                data = alpha_vantage_service.get_stock_data(symbol, start_date, end_date)
+                                if data is not None and not data.empty:
+                                    logger.info(f"Successfully fetched data using {db_source.name}")
+                                    return data
+                        elif db_source.provider and db_source.provider.lower() == 'futu':
+                            futu_svc = get_futu_service()
+                            if futu_svc:
+                                try:
+                                    data = futu_svc.get_stock_data(symbol, start_date, end_date)
+                                    if data is not None and not data.empty:
+                                        logger.info(f"Successfully fetched data using {db_source.name}")
+                                        return data
+                                except Exception as e:
+                                    logger.warning(f"Futu service failed: {e}")
+                                    continue
                     except Exception as e:
                         logger.warning(f"Data source {db_source.name} failed: {e}")
                         continue
             except Exception as e:
                 logger.warning(f"Error querying data sources: {e}")
             
-            # Final fallback: Use openbb_service directly
-            logger.info(f"Using default openbb_service for {symbol}")
+            # Final fallback: Try openbb_service first, then Alpha Vantage
+            logger.info(f"Trying default openbb_service for {symbol}")
             data = openbb_service.get_stock_data(symbol, start_date, end_date)
             
             if data is not None and not data.empty:
                 return data
-            else:
-                logger.warning(f"No data returned from API for {symbol}")
-                return None
+            
+            # Try Alpha Vantage as fallback
+            if alpha_vantage_service.is_available():
+                logger.info(f"Trying Alpha Vantage for {symbol}")
+                try:
+                    data = alpha_vantage_service.get_stock_data(symbol, start_date, end_date)
+                    if data is not None and not data.empty:
+                        return data
+                except Exception as e:
+                    logger.warning(f"Alpha Vantage failed for {symbol}: {e}")
+            
+            # Try Futu as fallback (for HK/CN markets)
+            futu_svc = get_futu_service()
+            if futu_svc:
+                logger.info(f"Trying Futu for {symbol}")
+                try:
+                    data = futu_svc.get_stock_data(symbol, start_date, end_date)
+                    if data is not None and not data.empty:
+                        return data
+                except Exception as e:
+                    logger.warning(f"Futu failed for {symbol}: {e}")
+            
+            logger.warning(f"No data returned from API for {symbol}")
+            return None
                 
         except Exception as e:
             logger.error(f"Error fetching from API for {symbol}: {e}")

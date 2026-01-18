@@ -96,6 +96,45 @@ export interface BacktestRequest {
   compare_items?: string[]; // ['NASDAQ', 'SMA_CROSS', 'MOMENTUM', etc.]
 }
 
+// Backtest Record Types
+export interface BacktestRecord {
+  id: number;
+  name?: string;
+  strategy_id: number;
+  strategy_name?: string;
+  start_date: string;
+  end_date: string;
+  initial_cash: number;
+  symbols: string[];
+  sharpe_ratio?: number;
+  sortino_ratio?: number;
+  annualized_return?: number;
+  max_drawdown?: number;
+  win_rate?: number;
+  total_trades?: number;
+  total_return?: number;
+  full_result?: any; // Complete BacktestResult JSON
+  compare_with_indices?: boolean;
+  compare_items?: string[];
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface BacktestRecordCreate {
+  name?: string;
+  strategy_id: number;
+  start_date: string;
+  end_date: string;
+  initial_cash: number;
+  symbols: string[];
+  compare_with_indices?: boolean;
+  compare_items?: string[];
+}
+
+export interface BacktestRecordUpdate {
+  name?: string;
+}
+
 export interface BacktestResult {
   sharpe_ratio: number;
   sortino_ratio?: number;
@@ -348,4 +387,46 @@ export interface SaveStrategyRequest {
   name: string;
   description?: string;
   target_portfolio_id?: number;
+}
+
+// Parameter Optimization Types
+export interface ParameterOptimizationRequest {
+  strategy_id: number;
+  start_date: string;
+  end_date: string;
+  initial_cash: number;
+  symbols: string[];
+  parameter_ranges: { [key: string]: any[] };
+  optimization_metric?: 'sharpe_ratio' | 'total_return' | 'annualized_return' | 'sortino_ratio';
+}
+
+export interface ParameterOptimizationResult {
+  best_parameters: { [key: string]: any };
+  best_metric_value: number;
+  optimization_metric: string;
+  results: Array<{
+    parameters: { [key: string]: any };
+    sharpe_ratio?: number;
+    total_return?: number;
+    annualized_return?: number;
+    sortino_ratio?: number;
+    max_drawdown?: number;
+    win_rate?: number;
+    total_trades?: number;
+  }>;
+  total_combinations: number;
+}
+
+// AI Strategy Analysis Types
+export interface AIStrategyAnalysisRequest {
+  backtest_result: BacktestResult;
+  strategy_id: number;
+}
+
+export interface AIStrategyAnalysisResponse {
+  analysis_summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  optimization_suggestions: string[];
+  raw_ai_response?: string;
 }

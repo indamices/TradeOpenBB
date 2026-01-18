@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 
 # Enums
@@ -420,3 +420,59 @@ class BacktestResult(BaseModel):
     trades: Optional[List[Dict[str, Any]]] = None  # [{date, symbol, side, price, quantity, commission, trigger_reason, pnl, pnl_percent}, ...]
     per_stock_performance: Optional[List[Dict[str, Any]]] = None  # Per-stock performance breakdown
     index_comparisons: Optional[List[Dict[str, Any]]] = None  # Comparison with market indices
+    strategy_comparisons: Optional[Dict[str, Any]] = None  # Strategy comparison results
+
+
+# Backtest Record Schemas
+class BacktestRecordBase(BaseModel):
+    name: Optional[str] = None
+    strategy_id: int
+    start_date: date
+    end_date: date
+    initial_cash: float
+    symbols: List[str]
+    compare_with_indices: Optional[bool] = False
+    compare_items: Optional[List[str]] = None
+
+class BacktestRecordCreate(BacktestRecordBase):
+    pass
+
+class BacktestRecordUpdate(BaseModel):
+    name: Optional[str] = None
+
+class BacktestRecord(BacktestRecordBase):
+    id: int
+    strategy_name: Optional[str] = None
+    sharpe_ratio: Optional[float] = None
+    sortino_ratio: Optional[float] = None
+    annualized_return: Optional[float] = None
+    max_drawdown: Optional[float] = None
+    win_rate: Optional[float] = None
+    total_trades: Optional[int] = None
+    total_return: Optional[float] = None
+    full_result: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
+# Parameter Optimization Schemas
+class ParameterOptimizationRequest(BaseModel):
+    strategy_id: int
+    start_date: str  # ISO format date
+    end_date: str
+    initial_cash: float = Field(gt=0, default=100000)
+    symbols: List[str] = Field(min_items=1)
+    parameter_ranges: Dict[str, List[Any]] = Field(default_factory=dict)  # e.g., {"short_sma": [10, 20, 30], "long_sma": [50, 100, 200]}
+    optimization_metric: str = Field(default="sharpe_ratio")  # sharpe_ratio, sortino_ratio, annualized_return, total_return, win_rate, max_drawdown
+
+class ParameterOptimizationResult(BaseModel):
+    best_parameters: Dict[str, Any]
+    best_metric_value: float
+    best_result: Dict[str, Any]  # Best BacktestResult
+    all_results: List[Dict[str, Any]]  # All tested combinations with results
+    total_combinations: int
+    valid_combinations: int
+    optimization_metric: str

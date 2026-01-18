@@ -287,3 +287,44 @@ class DataSourceConfig(Base):
     rate_limit = Column(Integer, nullable=True)  # Requests per minute
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class BacktestRecord(Base):
+    """回测记录表"""
+    __tablename__ = "backtest_records"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=True)  # 回测名称（用户可自定义）
+    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=False, index=True)
+    strategy_name = Column(String(255), nullable=True)  # 策略名称快照
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    initial_cash = Column(Float, nullable=False)
+    symbols = Column(JSON, nullable=False)  # List[str] - 回测的股票列表
+    
+    # 回测结果指标
+    sharpe_ratio = Column(Float, nullable=True)
+    sortino_ratio = Column(Float, nullable=True)
+    annualized_return = Column(Float, nullable=True)
+    max_drawdown = Column(Float, nullable=True)
+    win_rate = Column(Float, nullable=True)
+    total_trades = Column(Integer, nullable=True)
+    total_return = Column(Float, nullable=True)
+    
+    # 详细结果（JSON存储完整结果）
+    full_result = Column(JSON, nullable=True)  # 完整的BacktestResult JSON
+    
+    # 回测参数
+    compare_with_indices = Column(Boolean, default=False)
+    compare_items = Column(JSON, nullable=True)  # List[str]
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # 关系
+    strategy = relationship("Strategy", foreign_keys=[strategy_id])
+    
+    __table_args__ = (
+        Index('idx_backtest_strategy_date', 'strategy_id', 'created_at'),
+        Index('idx_backtest_created', 'created_at'),
+    )
