@@ -126,7 +126,14 @@ class DataService:
             return api_data
         
         # Return empty DataFrame if all fails
-        logger.warning(f"No data available for {symbol} ({start_date} to {end_date})")
+        logger.warning(f"No data available for {symbol} ({start_date} to {end_date}) from any data source")
+        
+        # Log which data sources were tried (for debugging)
+        if self.source_id or self.test_source_id:
+            logger.warning(f"Attempted to use specific data source ID: {self.source_id or self.test_source_id}")
+        else:
+            logger.warning("Attempted to use active data sources by priority, but all failed")
+        
         return pd.DataFrame()
     
     def _get_from_database(self, symbol: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:

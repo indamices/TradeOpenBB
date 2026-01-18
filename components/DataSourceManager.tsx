@@ -30,7 +30,28 @@ const DataSourceManager: React.FC = () => {
   useEffect(() => {
     loadDataSources();
     loadAvailableSources();
+    loadDataSourcesStatus();
   }, []);
+
+  const loadDataSourcesStatus = async () => {
+    try {
+      const status = await dataSourceService.getDataSourcesStatus();
+      const statusMap: { [key: number]: { is_working: boolean; working_source_id?: number } } = {};
+      status.sources.forEach(s => {
+        statusMap[s.source_id] = { is_working: s.is_working };
+      });
+      if (status.working_source_id) {
+        Object.keys(statusMap).forEach(id => {
+          if (parseInt(id) === status.working_source_id) {
+            statusMap[parseInt(id)].working_source_id = status.working_source_id;
+          }
+        });
+      }
+      setSourceStatuses(statusMap);
+    } catch (err) {
+      console.error('Failed to load data sources status:', err);
+    }
+  };
 
   const loadDataSources = async () => {
     try {
@@ -401,26 +422,37 @@ const DataSourceManager: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-slate-300">{source.provider}</td>
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => handleToggleActive(source.id, source.is_active)}
-                        className={`flex items-center gap-2 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                          source.is_active
-                            ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
-                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                        }`}
-                      >
-                        {source.is_active ? (
-                          <>
-                            <CheckCircle size={14} />
-                            激活
-                          </>
-                        ) : (
-                          <>
-                            <XCircle size={14} />
-                            未激活
-                          </>
+                      <div className="flex flex-col gap-1">
+                        <button
+                          onClick={() => handleToggleActive(source.id, source.is_active)}
+                          className={`flex items-center gap-2 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                            source.is_active
+                              ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                              : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                          }`}
+                        >
+                          {source.is_active ? (
+                            <>
+                              <CheckCircle size={14} />
+                              激活
+                            </>
+                          ) : (
+                            <>
+                              <XCircle size={14} />
+                              未激活
+                            </>
+                          )}
+                        </button>
+                        {source.is_active && sourceStatuses[source.id] && (
+                          <span className={`text-xs px-1 py-0.5 rounded ${
+                            sourceStatuses[source.id].is_working
+                              ? 'bg-blue-500/20 text-blue-400'
+                              : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {sourceStatuses[source.id].is_working ? '✓ 可用' : '✗ 不可用'}
+                          </span>
                         )}
-                      </button>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       {source.is_default ? (
@@ -443,11 +475,16 @@ const DataSourceManager: React.FC = () => {
                           onClick={async () => {
                             try {
                               setError(null);
-                              const result = await dataSourceService.testDataSourceConnection(source.id);
-                              if (result.success) {
-                                alert(`连接测试成功！\n${result.message}\n数据点: ${result.data_points || 0}`);
-                              } else {
-                                alert(`连接测试失败：\n${result.message}`);
+                              setLoading(true);
+                              try {
+                                const result = await dataSourceService.testDataSourceConnection(source.id);
+                                if (result.success) {
+                                  alert(`✅ ${result.message || '连接测试成功！'}\n\n数据源: ${result.source_name || source.name}\n提供商: ${result.provider || 'Unknown'}\n测试股票: ${result.symbol || 'N/A'}\n数据点: ${result.data_points || 0}\n日期范围: ${result.date_range || 'N/A'}`);
+                                } else {
+                                  alert(`❌ ${result.message || '连接测试失败'}\n\n数据源: ${result.source_name || source.name}\n提供商: ${result.provider || 'Unknown'}\n${result.error ? `错误: ${result.error}` : ''}`);
+                                }
+                              } finally {
+                                setLoading(false);
                               }
                             } catch (err) {
                               const apiError = err as ApiError;

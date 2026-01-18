@@ -188,11 +188,7 @@ export class TradingService {
 
   // AI Strategy Analysis methods
   async analyzeBacktestResult(request: AIStrategyAnalysisRequest): Promise<AIStrategyAnalysisResponse> {
-    const params = new URLSearchParams();
-    params.append('strategy_id', request.strategy_id.toString());
-    return apiClient.post<AIStrategyAnalysisResponse>(`/api/backtest/analyze?${params.toString()}`, {
-      backtest_result: request.backtest_result
-    });
+    return apiClient.post<AIStrategyAnalysisResponse>('/api/backtest/analyze', request);
   }
 }
 

@@ -480,3 +480,15 @@ class ParameterOptimizationResult(BaseModel):
     best_result: Optional[Dict[str, Any]] = None  # Best BacktestResult (deprecated, use results[0])
     all_results: Optional[List[Dict[str, Any]]] = None  # Deprecated, use results
     valid_combinations: Optional[int] = None
+
+# AI Strategy Analysis Schemas
+class AIStrategyAnalysisRequest(BaseModel):
+    backtest_result: BacktestResult
+    strategy_id: int
+
+class AIStrategyAnalysisResponse(BaseModel):
+    analysis_summary: str
+    strengths: List[str]
+    weaknesses: List[str]
+    optimization_suggestions: List[str]
+    raw_ai_response: Optional[str] = None

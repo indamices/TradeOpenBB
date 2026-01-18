@@ -155,6 +155,58 @@ class BacktestEngine:
                 commission = max(1, revenue * 0.0003)
                 net_revenue = revenue - commission
                 
+                # Calculate P&L: find matching buy trades for this symbol
+                buy_cost = 0.0
+                buy_qty = 0
+                matched_trades = []
+                
+                # Find unmatched buy trades for this symbol (in FIFO order)
+                for trade in self.trades:
+                    if (trade['symbol'] == symbol and 
+                        trade['side'] == 'BUY' and 
+                        trade.get('pnl') is None and
+                        buy_qty < shares_to_sell):
+                        matched_qty = min(trade['quantity'], shares_to_sell - buy_qty)
+                        trade_cost = trade['price'] * matched_qty + trade.get('commission', 0) * (matched_qty / trade['quantity'])
+                        buy_cost += trade_cost
+                        buy_qty += matched_qty
+                        matched_trades.append({
+                            'trade': trade,
+                            'quantity': matched_qty,
+                            'cost': trade_cost
+                        })
+                        if buy_qty >= shares_to_sell:
+                            break
+                
+                # Calculate P&L for this sell
+                if buy_qty > 0:
+                    avg_buy_price = buy_cost / buy_qty
+                    total_sell_cost = revenue - commission
+                    pnl = total_sell_cost - buy_cost
+                    pnl_percent = (pnl / buy_cost) * 100 if buy_cost > 0 else 0.0
+                    
+                    # Update P&L for matched buy trades proportionally
+                    remaining_pnl = pnl
+                    for i, match in enumerate(matched_trades):
+                        if i == len(matched_trades) - 1:
+                            # Last trade gets remaining P&L
+                            match['trade']['pnl'] = remaining_pnl
+                        else:
+                            # Proportional P&L
+                            trade_pnl = (match['cost'] / buy_cost) * pnl
+                            match['trade']['pnl'] = trade_pnl
+                            remaining_pnl -= trade_pnl
+                        
+                        # Calculate P&L percent for buy trade
+                        if match['trade']['price'] > 0 and match['quantity'] > 0:
+                            match['trade']['pnl_percent'] = (match['trade']['pnl'] / (match['trade']['price'] * match['quantity'])) * 100
+                        else:
+                            match['trade']['pnl_percent'] = 0.0
+                else:
+                    # No matching buy found, P&L is 0
+                    pnl = 0.0
+                    pnl_percent = 0.0
+                
                 self.cash += net_revenue
                 self.positions[symbol] = 0
                 
@@ -166,8 +218,8 @@ class BacktestEngine:
                     'price': price,
                     'commission': commission,
                     'trigger_reason': trigger_reason or f"Sell signal triggered for {symbol}",
-                    'pnl': None,  # Will be calculated in calculate_metrics
-                    'pnl_percent': None
+                    'pnl': pnl,
+                    'pnl_percent': pnl_percent
                 })
     
     def calculate_portfolio_value(self, prices: Dict[str, float]) -> float:
@@ -192,11 +244,12 @@ class BacktestEngine:
         returns = np.diff(equity_array) / equity_array[:-1]
         
         # Total return
-        total_return = (equity_array[-1] - equity_array[0]) / equity_array[0] * 100
+        # Total return as decimal (0.108 means 10.8%), not percentage
+        total_return = (equity_array[-1] - equity_array[0]) / equity_array[0]
         
-        # Annualized return (assuming daily data)
+        # Annualized return as decimal (0.108 means 10.8%), not percentage
         days = len(equity_curve)
-        annualized_return = ((equity_array[-1] / equity_array[0]) ** (252 / days) - 1) * 100 if days > 0 else 0
+        annualized_return = ((equity_array[-1] / equity_array[0]) ** (252 / days) - 1) if days > 0 else 0.0
         
         # Sharpe Ratio (assuming risk-free rate = 0)
         if len(returns) > 0 and returns.std() > 0:
@@ -235,7 +288,7 @@ class BacktestEngine:
             
             if trade_pnl:
                 winning_trades = sum(1 for pnl in trade_pnl if pnl > 0)
-                win_rate = (winning_trades / len(trade_pnl)) * 100
+                win_rate = (winning_trades / len(trade_pnl))  # As decimal (0.5 means 50%)
             else:
                 win_rate = 0.0
         else:

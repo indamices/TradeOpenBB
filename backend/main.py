@@ -1080,10 +1080,9 @@ async def optimize_strategy_parameters(
         logger.error(f"Parameter optimization failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Parameter optimization failed: {str(e)}")
 
-@app.post("/api/backtest/analyze")
+@app.post("/api/backtest/analyze", response_model=AIStrategyAnalysisResponse)
 async def analyze_backtest_result(
-    backtest_result: BacktestResult,
-    strategy_id: int,
+    request: AIStrategyAnalysisRequest,
     db: Session = Depends(get_db)
 ):
     """Analyze backtest result using AI and provide suggestions"""
@@ -1092,22 +1091,32 @@ async def analyze_backtest_result(
         from models import Strategy
         
         # Get strategy
-        strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
+        strategy = db.query(Strategy).filter(Strategy.id == request.strategy_id).first()
         if not strategy:
             raise HTTPException(status_code=404, detail="Strategy not found")
         
         analyzer = StrategyAnalyzer(db)
+        
+        # Convert backtest_result to dict if it's a Pydantic model
+        backtest_result_dict = request.backtest_result
+        if hasattr(request.backtest_result, 'model_dump'):
+            backtest_result_dict = request.backtest_result.model_dump()
+        elif hasattr(request.backtest_result, '__dict__'):
+            backtest_result_dict = request.backtest_result.__dict__
+        elif isinstance(request.backtest_result, dict):
+            backtest_result_dict = request.backtest_result
+        
         result = await analyzer.analyze_backtest_result(
-            backtest_result=backtest_result.model_dump() if hasattr(backtest_result, 'model_dump') else backtest_result.__dict__,
+            backtest_result=backtest_result_dict,
             strategy_code=strategy.logic_code,
             strategy_name=strategy.name
         )
         
-        return result
+        return AIStrategyAnalysisResponse(**result)
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Strategy analysis failed: {str(e)}")
+        logger.error(f"Strategy analysis failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Strategy analysis failed: {str(e)}")
 
 # AI Model Config endpoints
@@ -1825,6 +1834,18 @@ async def delete_chat_strategy(chat_strategy_id: int, db: Session = Depends(get_
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete chat strategy: {str(e)}")
 
+# Benchmark Strategies endpoint
+@app.get("/api/backtest/benchmark-strategies")
+async def get_benchmark_strategies():
+    """Get list of available benchmark strategies for comparison"""
+    try:
+        from services.benchmark_strategies import list_benchmark_strategies
+        strategies = list_benchmark_strategies()
+        return strategies
+    except Exception as e:
+        logger.error(f"Failed to get benchmark strategies: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get benchmark strategies: {str(e)}")
+
 # Backtest Symbol List endpoints (回测标的清单)
 @app.get("/api/backtest/symbol-lists", response_model=List[SymbolList])
 async def get_symbol_lists(
@@ -2073,6 +2094,75 @@ async def delete_data_source(source_id: int, db: Session = Depends(get_db)):
         logger.error(f"Failed to delete data source: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete data source: {str(e)}")
+
+@app.get("/api/data-sources/status")
+async def get_data_sources_status(db: Session = Depends(get_db)):
+    """Get status of all active data sources (which one is currently being used)"""
+    try:
+        from models import DataSourceConfig
+        from datetime import datetime, timedelta
+        
+        # Get all active data sources
+        active_sources = db.query(DataSourceConfig).filter(
+            DataSourceConfig.is_active == True
+        ).order_by(DataSourceConfig.priority.desc(), DataSourceConfig.is_default.desc()).all()
+        
+        # Test each source with a quick fetch
+        test_symbol = "AAPL"
+        test_end_date = datetime.now().strftime('%Y-%m-%d')
+        test_start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+        
+        status_list = []
+        working_source_id = None
+        
+        for source in active_sources:
+            try:
+                from services.data_service import DataService
+                async with DataService(db=db) as data_service:
+                    data_service.test_source_id = source.id
+                    data = await data_service.get_historical_data(
+                        test_symbol,
+                        test_start_date,
+                        test_end_date,
+                        use_cache=False
+                    )
+                    
+                    is_working = data is not None and not data.empty
+                    if is_working and working_source_id is None:
+                        working_source_id = source.id
+                    
+                    status_list.append({
+                        "source_id": source.id,
+                        "name": source.name,
+                        "provider": source.provider,
+                        "is_working": is_working,
+                        "priority": source.priority,
+                        "is_default": source.is_default,
+                        "data_points": len(data) if is_working else 0,
+                        "error": None
+                    })
+            except Exception as e:
+                error_msg = str(e)
+                logger.warning(f"Failed to test source {source.name}: {error_msg}")
+                status_list.append({
+                    "source_id": source.id,
+                    "name": source.name,
+                    "provider": source.provider,
+                    "is_working": False,
+                    "priority": source.priority,
+                    "is_default": source.is_default,
+                    "data_points": 0,
+                    "error": error_msg
+                })
+        
+        return {
+            "sources": status_list,
+            "working_source_id": working_source_id,
+            "message": f"找到 {len([s for s in status_list if s['is_working']])} 个可用的数据源（共 {len(status_list)} 个激活的数据源）"
+        }
+    except Exception as e:
+        logger.error(f"Failed to get data sources status: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get data sources status: {str(e)}")
 
 @app.post("/api/data-sources/{source_id}/test")
 async def test_data_source_connection(source_id: int, db: Session = Depends(get_db)):

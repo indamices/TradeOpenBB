@@ -255,19 +255,21 @@ const BacktestComparison: React.FC<BacktestComparisonProps> = ({
                     const result = comparisonData[item.id];
                     const value = result?.total_return ?? 0;
                     const isBest = bestTotalReturn === item.id;
+                    // total_return is decimal (0.108 = 10.8%), convert to percentage for display
+                    const displayValue = value * 100;
                     return (
                       <td
                         key={item.id}
                         className={`px-4 py-3 text-sm text-center ${
                           isBest
                             ? 'bg-emerald-500/20 text-emerald-400 font-bold'
-                            : value >= 0
+                            : displayValue >= 0
                             ? 'text-emerald-400'
                             : 'text-red-400'
                         }`}
                       >
                         {value !== null && value !== undefined
-                          ? `${value >= 0 ? '+' : ''}${value.toFixed(2)}%${isBest ? ' ✓' : ''}`
+                          ? `${displayValue >= 0 ? '+' : ''}${displayValue.toFixed(2)}%${isBest ? ' ✓' : ''}`
                           : '-'}
                       </td>
                     );
@@ -286,7 +288,8 @@ const BacktestComparison: React.FC<BacktestComparisonProps> = ({
                     const result = comparisonData[item.id];
                     const value = result?.annualized_return;
                     const isBest = bestAnnualized === item.id;
-                    const displayValue = value !== null && value !== undefined ? value : 0;
+                    // annualized_return is decimal (0.108 = 10.8%), convert to percentage for display
+                    const displayValue = (value !== null && value !== undefined ? value : 0) * 100;
                     return (
                       <td
                         key={item.id}
@@ -376,19 +379,21 @@ const BacktestComparison: React.FC<BacktestComparisonProps> = ({
                     const result = comparisonData[item.id];
                     const value = result?.win_rate;
                     const isBest = value !== undefined && value !== null && bestWinRate === item.id;
+                    // win_rate is decimal (0.3333 = 33.33%), convert to percentage for display
+                    const displayValue = value !== undefined && value !== null ? value * 100 : null;
                     return (
                       <td
                         key={item.id}
                         className={`px-4 py-3 text-sm text-center ${
                           isBest
                             ? 'bg-emerald-500/20 text-emerald-400 font-bold'
-                            : value !== undefined && value !== null
+                            : displayValue !== null
                             ? 'text-emerald-400'
                             : 'text-slate-500'
                         }`}
                       >
-                        {value !== undefined && value !== null
-                          ? `${value.toFixed(2)}%${isBest ? ' ✓' : ''}`
+                        {displayValue !== null
+                          ? `${displayValue.toFixed(2)}%${isBest ? ' ✓' : ''}`
                           : '-'}
                       </td>
                     );
@@ -427,7 +432,8 @@ const BacktestComparison: React.FC<BacktestComparisonProps> = ({
                   .map((item) => {
                     const mainReturn = comparisonData['main']?.total_return ?? 0;
                     const itemReturn = comparisonData[item.id]?.total_return ?? 0;
-                    const outperformance = mainReturn - itemReturn;
+                    // total_return is decimal, convert difference to percentage
+                    const outperformance = (mainReturn - itemReturn) * 100;
                     return (
                       <div key={item.id} className="flex items-center justify-between text-sm">
                         <span className="text-slate-400">vs {item.name}:</span>

@@ -26,7 +26,11 @@ export const dataSourceService = {
     return apiClient.get<{ sources: AvailableDataSource[] }>('/api/data-sources/available');
   },
 
-  async testDataSourceConnection(id: number): Promise<{ success: boolean; message: string; data_points?: number; symbol?: string; date_range?: string; error?: string }> {
+  async getDataSourcesStatus(): Promise<{ sources: Array<{ source_id: number; name: string; provider: string; is_working: boolean; priority: number; is_default: boolean; data_points: number; error?: string }>; working_source_id?: number; message: string }> {
+    return apiClient.get('/api/data-sources/status');
+  },
+
+  async testDataSourceConnection(id: number): Promise<{ success: boolean; message: string; data_points?: number; symbol?: string; date_range?: string; error?: string; provider?: string; source_name?: string; is_active?: boolean }> {
     return apiClient.post(`/api/data-sources/${id}/test`);
   }
 };
