@@ -34,7 +34,8 @@ from schemas import (
     DataSourceConfigCreate, DataSourceConfigUpdate, DataSourceConfigResponse,
     SymbolList, SymbolListCreate, SymbolListUpdate, SetStrategyActiveRequest, BatchSetActiveRequest,
     BacktestRecord, BacktestRecordCreate, BacktestRecordUpdate,
-    ParameterOptimizationRequest, ParameterOptimizationResult
+    ParameterOptimizationRequest, ParameterOptimizationResult,
+    AIStrategyAnalysisRequest, AIStrategyAnalysisResponse
 )
 from market_service import get_realtime_quote, get_multiple_quotes, get_market_overview, get_technical_indicators
 from ai_service_factory import generate_strategy, chat_with_ai
