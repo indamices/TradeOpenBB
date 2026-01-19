@@ -10,7 +10,7 @@ import { ApiError } from '../services/apiClient';
 const DataSourceManager: React.FC = () => {
   const [dataSources, setDataSources] = useState<DataSourceConfig[]>([]);
   const [availableSources, setAvailableSources] = useState<AvailableDataSource[]>([]);
-  const [sourceStatuses, setSourceStatuses] = useState<{ [key: number]: { is_working: boolean; working_source_id?: number } }>({});
+  const [sourceStatuses, setSourceStatuses] = useState<{ [key: number]: { is_working: boolean; working_source_id?: number; error?: string } }>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -37,13 +37,16 @@ const DataSourceManager: React.FC = () => {
   const loadDataSourcesStatus = async () => {
     try {
       const status = await dataSourceService.getDataSourcesStatus();
-      const statusMap: { [key: number]: { is_working: boolean; working_source_id?: number } } = {};
-      
+      const statusMap: { [key: number]: { is_working: boolean; working_source_id?: number; error?: string } } = {};
+
       // Add null check for status.sources
       if (status?.sources && Array.isArray(status.sources)) {
         status.sources.forEach(s => {
           if (s?.source_id !== undefined) {
-            statusMap[s.source_id] = { is_working: s.is_working ?? false };
+            statusMap[s.source_id] = {
+              is_working: s.is_working ?? false,
+              error: s.error
+            };
           }
         });
       }
@@ -466,13 +469,20 @@ const DataSourceManager: React.FC = () => {
                           )}
                         </button>
                         {source.is_active && sourceStatuses && typeof sourceStatuses === 'object' && sourceStatuses[source.id] ? (
-                          <span className={`text-xs px-1 py-0.5 rounded ${
-                            sourceStatuses[source.id]?.is_working
-                              ? 'bg-blue-500/20 text-blue-400'
-                              : 'bg-red-500/20 text-red-400'
-                          }`}>
-                            {sourceStatuses[source.id]?.is_working ? '✓ 可用' : '✗ 不可用'}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className={`text-xs px-1 py-0.5 rounded ${
+                              sourceStatuses[source.id]?.is_working
+                                ? 'bg-blue-500/20 text-blue-400'
+                                : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {sourceStatuses[source.id]?.is_working ? '✓ 可用' : '✗ 不可用'}
+                            </span>
+                            {!sourceStatuses[source.id]?.is_working && sourceStatuses[source.id]?.error && (
+                              <span className="text-xs text-red-400 max-w-[200px] truncate" title={sourceStatuses[source.id].error}>
+                                {sourceStatuses[source.id].error}
+                              </span>
+                            )}
+                          </div>
                         ) : null}
                       </div>
                     </td>
