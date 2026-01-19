@@ -291,8 +291,8 @@ const ParameterOptimization: React.FC<ParameterOptimizationProps> = ({
               参数范围
             </label>
             <div className="space-y-3">
-              {parameterRanges.map((param, index) => (
-                <div key={index} className="flex items-center gap-2 p-3 bg-slate-800 rounded-lg">
+              {parameterRanges.map((param, idx) => (
+                <div key={`param-${param.name || idx}`} className="flex items-center gap-2 p-3 bg-slate-800 rounded-lg">
                   <div className="flex-1">
                     <span className="text-slate-300 font-medium">{param.name}:</span>
                     <span className="text-slate-400 ml-2">
@@ -447,11 +447,11 @@ const ParameterOptimization: React.FC<ParameterOptimizationProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {result.results.slice(0, 20).map((item, index) => {
+                  {result.results.slice(0, 20).map((item, idx) => {
                     const isBest = JSON.stringify(item.parameters) === JSON.stringify(result.best_parameters);
                     return (
                       <tr
-                        key={index}
+                        key={`result-${idx}`}
                         className={`border-b border-slate-800 ${isBest ? 'bg-emerald-900/20' : ''}`}
                       >
                         <td className="py-2 px-3 text-slate-300">

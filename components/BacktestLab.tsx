@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  LineChart, Line, AreaChart, Area, BarChart, Bar, 
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  LineChart, Line, AreaChart, Area, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { 
-  Play, Loader2, TrendingUp, TrendingDown, AlertCircle, 
-  BarChart3, Activity, Target, DollarSign, Sparkles 
+import {
+  Play, Loader2, TrendingUp, TrendingDown, AlertCircle,
+  BarChart3, Activity, Target, DollarSign, Sparkles
 } from 'lucide-react';
 import { Strategy, BacktestRequest, BacktestResult } from '../types';
 import { tradingService } from '../services/tradingService';
@@ -40,22 +40,26 @@ const BacktestLab: React.FC = () => {
     start.setFullYear(start.getFullYear() - 1);
     setEndDate(end.toISOString().split('T')[0]);
     setStartDate(start.toISOString().split('T')[0]);
-    
+
     // Listen for strategy saved events to refresh the list
     const handleStrategySaved = () => {
       loadStrategies();
     };
     window.addEventListener('strategySaved', handleStrategySaved);
-    
+
     return () => {
       window.removeEventListener('strategySaved', handleStrategySaved);
     };
-  }, []);
+  }, [loadStrategies]);
 
-  const loadStrategies = async () => {
+  /**
+   * ✅ 优化：使用 useCallback 缓存函数，避免不必要的重新创建
+   * 依赖项：showActiveOnly, selectedStrategy
+   */
+  const loadStrategies = useCallback(async () => {
     try {
       // Load strategies based on filter
-      const data = showActiveOnly 
+      const data = showActiveOnly
         ? await tradingService.getActiveStrategies()
         : await tradingService.getStrategies();
       setStrategies(data);
@@ -65,13 +69,17 @@ const BacktestLab: React.FC = () => {
     } catch (err) {
       console.error('Failed to load strategies:', err);
     }
-  };
+  }, [showActiveOnly, selectedStrategy]);
 
   useEffect(() => {
     loadStrategies();
-  }, [showActiveOnly]);
+  }, [loadStrategies]);
 
-  const handleRunBacktest = async () => {
+  /**
+   * ✅ 优化：使用 useCallback 缓存回测函数
+   * 依赖项：selectedStrategy, startDate, endDate, selectedSymbols, manualSymbols, useManualSymbols, initialCash
+   */
+  const handleRunBacktest = useCallback(async () => {
     if (!selectedStrategy) {
       setError('Please select a strategy');
       return;
@@ -83,10 +91,10 @@ const BacktestLab: React.FC = () => {
     }
 
     // Get symbols from pool or manual input
-    const symbolList = useManualSymbols 
+    const symbolList = useManualSymbols
       ? manualSymbols.split(',').map(s => s.trim()).filter(s => s)
       : selectedSymbols;
-    
+
     if (symbolList.length === 0) {
       setError('Please select a stock pool or enter at least one symbol');
       return;
@@ -120,22 +128,35 @@ const BacktestLab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedStrategy, startDate, endDate, selectedSymbols, manualSymbols, useManualSymbols, initialCash]);
 
-  // Format equity curve data for chart
-  const equityCurveData = result?.equity_curve?.map(item => ({
-    date: new Date(item.date).toLocaleDateString(),
-    value: item.value,
-  })) || [];
+  /**
+   * ✅ 优化：使用 useMemo 缓存图表数据转换
+   * 仅在 result 变化时重新计算，避免每次渲染都转换数据
+   */
+  const equityCurveData = useMemo(() => {
+    return result?.equity_curve?.map(item => ({
+      date: new Date(item.date).toLocaleDateString(),
+      value: item.value,
+    })) || [];
+  }, [result]);
 
-  // Format drawdown data for chart
-  const drawdownData = result?.drawdown_series?.map(item => ({
-    date: new Date(item.date).toLocaleDateString(),
-    drawdown: (item.drawdown * 100).toFixed(2), // Convert to percentage
-  })) || [];
+  /**
+   * ✅ 优化：使用 useMemo 缓存回撤数据转换
+   */
+  const drawdownData = useMemo(() => {
+    return result?.drawdown_series?.map(item => ({
+      date: new Date(item.date).toLocaleDateString(),
+      drawdown: (item.drawdown * 100).toFixed(2), // Convert to percentage
+    })) || [];
+  }, [result]);
 
-  // Format trades data for timeline
-  const tradesData = result?.trades || [];
+  /**
+   * ✅ 优化：使用 useMemo 缓存交易数据
+   */
+  const tradesData = useMemo(() => {
+    return result?.trades || [];
+  }, [result]);
 
   return (
     <div className="space-y-6">
@@ -573,7 +594,7 @@ const BacktestLab: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-800">
                     {result.per_stock_performance.map((stock, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                      <tr key={`stock-perf-${stock.symbol}-${idx}`} className="hover:bg-slate-800/30 transition-colors">
                         <td className="px-6 py-4 font-bold text-slate-200">{stock.symbol}</td>
                         <td className="px-6 py-4 text-slate-300">{stock.total_trades}</td>
                         <td className="px-6 py-4 text-slate-300">{stock.buy_trades_count}</td>
@@ -666,7 +687,7 @@ const BacktestLab: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-800">
                     {tradesData.map((trade, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                      <tr key={`trade-${trade.date}-${trade.symbol}-${idx}`} className="hover:bg-slate-800/30 transition-colors">
                         <td className="px-6 py-4 text-slate-300">
                           {new Date(trade.date).toLocaleString()}
                         </td>
@@ -717,4 +738,8 @@ const BacktestLab: React.FC = () => {
   );
 };
 
-export default BacktestLab;
+/**
+ * ✅ 优化：使用 React.memo 包裹组件，避免不必要的重渲染
+ * 仅在 props 或内部状态实际变化时才重新渲染
+ */
+export default React.memo(BacktestLab);

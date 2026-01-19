@@ -1,9 +1,14 @@
 """
 Database configuration and session management
 Supports both SQLite (default) and PostgreSQL
+
+优化：
+- SQLite: 使用 StaticPool（无需连接池）
+- PostgreSQL: 优化的连接池配置（10 基础连接，20 额外连接，30秒超时，1小时回收）
 """
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 import os
 import logging
 from dotenv import load_dotenv
@@ -47,15 +52,30 @@ else:
 
 # Create engine with appropriate settings
 if DATABASE_URL.startswith("sqlite"):
-    # SQLite configuration
+    # SQLite configuration（不需要连接池）
     engine = create_engine(
         DATABASE_URL,
         connect_args={"check_same_thread": False},  # SQLite specific
-        echo=False
+        echo=False,
+        poolclass=StaticPool,  # SQLite 不需要连接池，使用 StaticPool
     )
 else:
-    # PostgreSQL configuration
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    # PostgreSQL configuration with optimized pool
+    # 优化配置：
+    # - pool_size=10: 基础连接池大小（从默认 5 增至 10）
+    # - max_overflow=20: 额外连接数（从默认 10 增至 20）
+    # - pool_timeout=30: 等待连接超时（秒）
+    # - pool_recycle=3600: 1 小时回收连接（防止陈旧连接）
+    # - pool_pre_ping=True: 使用前验证连接
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,          # 使用前验证连接
+        pool_size=10,                # 基础连接池大小（从 5 增至 10）
+        max_overflow=20,             # 额外连接数（从 10 增至 20）
+        pool_timeout=30,             # 等待连接超时（秒）
+        pool_recycle=3600,           # 1 小时回收连接（防止陈旧连接）
+        echo=False
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

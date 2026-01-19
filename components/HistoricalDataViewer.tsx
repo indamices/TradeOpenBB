@@ -256,7 +256,7 @@ const HistoricalDataViewer: React.FC = () => {
                   const isPositive = change >= 0;
 
                   return (
-                    <tr key={index} className="hover:bg-slate-800/30 transition-colors">
+                    <tr key={`data-${formattedDate}-${index}`} className="hover:bg-slate-800/30 transition-colors">
                       <td className="px-6 py-4 font-medium text-slate-300">{formattedDate}</td>
                       <td className="px-6 py-4 text-right text-slate-300">
                         ${formatNumber(row.Open)}

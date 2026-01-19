@@ -14,12 +14,15 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 import logging
 import time
 
 # Use absolute imports for Docker deployment
 from database import get_db, init_db
+
+# Import monitoring and logging
+from monitoring import setup_logging, log_requests_middleware, monitor_performance, metrics
 from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base, StockPool, StockInfo, Conversation, ConversationMessage, ChatStrategy, BacktestSymbolList, DataSourceConfig, BacktestRecord
 from schemas import (
     Portfolio as PortfolioSchema, PortfolioCreate, PortfolioUpdate,
@@ -43,8 +46,8 @@ from ai_service_factory import generate_strategy, chat_with_ai
 from backtest_engine import run_backtest
 from services.benchmark_strategies import list_benchmark_strategies
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Setup structured logging
+logger = setup_logging()
 
 # Note: Conversation storage is now in database, but keeping this for backward compatibility during migration
 conversation_storage: Dict[str, List[Dict]] = {}
@@ -229,7 +232,64 @@ app.add_middleware(
 @app.middleware("http")
 async def cors_ensuring_middleware(request: Request, call_next):
     """Ensure CORS headers on all responses, including errors"""
-    # Let CORSMiddleware handle OPTIONS preflight - don't intercept it here
+    import json
+    import os
+    import time
+    
+    # #region agent log
+    log_file = r'c:\Users\Administrator\online-game\TradeOpenBB\.cursor\debug.log'
+    log_data = {
+        'location': 'main.py:cors_ensuring_middleware',
+        'message': 'CORS middleware entry',
+        'data': {'method': request.method, 'path': str(request.url.path), 'origin': request.headers.get('origin')},
+        'timestamp': time.time() * 1000,
+        'sessionId': 'debug-session',
+        'runId': 'run1',
+        'hypothesisId': 'A'
+    }
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(log_data) + '\n')
+    except: pass
+    # #endregion
+    
+    # Handle OPTIONS preflight requests explicitly
+    if request.method == "OPTIONS":
+        origin = request.headers.get("origin")
+        allowed_origins = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "https://tradeopenbb-frontend.onrender.com",
+        ]
+        import re
+        origin_pattern = re.compile(r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app")
+        
+        if origin and (origin in allowed_origins or origin_pattern.match(origin)):
+            from fastapi.responses import Response
+            response = Response()
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With, X-CSRFToken"
+            response.headers["Access-Control-Max-Age"] = "3600"
+            # #region agent log
+            log_data = {
+                'location': 'main.py:cors_ensuring_middleware',
+                'message': 'OPTIONS preflight handled',
+                'data': {'origin': origin, 'headers_set': True, 'path': str(request.url.path)},
+                'timestamp': time.time() * 1000,
+                'sessionId': 'debug-session',
+                'runId': 'run1',
+                'hypothesisId': 'A'
+            }
+            try:
+                with open(log_file, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps(log_data) + '\n')
+            except: pass
+            # #endregion
+            return response
+    
+    # Let CORSMiddleware handle other requests, then ensure headers on response
     response = await call_next(request)
     
     # Ensure CORS headers are present on all responses (including errors that CORSMiddleware might miss)
@@ -243,6 +303,53 @@ async def cors_ensuring_middleware(request: Request, call_next):
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With, X-CSRFToken"
+            # #region agent log
+            log_data = {
+                'location': 'main.py:cors_ensuring_middleware',
+                'message': 'CORS headers added to response',
+                'data': {'origin': origin, 'path': str(request.url.path), 'status_code': response.status_code},
+                'timestamp': time.time() * 1000,
+                'sessionId': 'debug-session',
+                'runId': 'run1',
+                'hypothesisId': 'A'
+            }
+            try:
+                with open(log_file, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps(log_data) + '\n')
+            except: pass
+            # #endregion
+
+    return response
+
+# Request logging and metrics middleware
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    """Log all requests with timing and collect metrics"""
+    start_time = time.time()
+    endpoint = f"{request.method} {request.url.path}"
+
+    # Process request
+    response = await call_next(request)
+
+    # Calculate duration
+    duration = time.time() - start_time
+
+    # Record metrics
+    metrics.record_request(endpoint, duration, response.status_code)
+
+    # Log request with emoji indicators
+    logger.info(f"➡️  {request.method} {request.url.path}")
+    logger.info(
+        f"⬅️  {request.method} {request.url.path} "
+        f"| {response.status_code} | {duration*1000:.2f}ms"
+    )
+
+    # Add process time header
+    response.headers["X-Process-Time"] = f"{duration:.3f}"
+
+    # Log slow requests
+    if duration > 1.0:
+        logger.warning(f"⚠️  慢请求: {request.method} {request.url.path} 耗时 {duration:.2f}s")
 
     return response
 
@@ -289,10 +396,27 @@ async def update_portfolio(portfolio_id: int, portfolio: PortfolioUpdate, db: Se
     return db_portfolio
 
 # Position endpoints
-@app.get("/api/positions", response_model=List[PositionSchema])
-async def get_positions(portfolio_id: int = 1, db: Session = Depends(get_db)):
-    positions = db.query(Position).filter(Position.portfolio_id == portfolio_id).all()
-    return positions
+@app.get("/api/positions", response_model=Tuple[List[PositionSchema], int])
+async def get_positions(
+    portfolio_id: int = 1,
+    skip: int = Query(0, ge=0, description="跳过的记录数"),
+    limit: int = Query(50, ge=1, le=200, description="每页记录数"),
+    db: Session = Depends(get_db)
+):
+    """
+    分页获取持仓
+    返回: (持仓列表, 总记录数)
+    """
+    # 构建基础查询
+    query = db.query(Position).filter(Position.portfolio_id == portfolio_id)
+
+    # 获取总数
+    total = query.count()
+
+    # 获取分页结果
+    positions = query.order_by(Position.symbol.asc()).offset(skip).limit(limit).all()
+
+    return positions, total
 
 @app.post("/api/positions", response_model=PositionSchema, status_code=status.HTTP_201_CREATED)
 async def create_position(position: PositionCreate, db: Session = Depends(get_db)):
@@ -395,20 +519,30 @@ async def create_order(order: OrderCreate, db: Session = Depends(get_db)):
     return db_order
 
 # Strategy endpoints
-@app.get("/api/strategies", response_model=List[StrategySchema])
+@app.get("/api/strategies", response_model=Tuple[List[StrategySchema], int])
 async def get_strategies(
     portfolio_id: Optional[int] = None,
     is_active: Optional[bool] = None,  # 新增：按活跃状态过滤
+    skip: int = Query(0, ge=0, description="跳过的记录数"),
+    limit: int = Query(50, ge=1, le=200, description="每页记录数"),
     db: Session = Depends(get_db)
 ):
-    """获取策略列表（支持按活跃状态过滤）"""
+    """
+    分页获取策略列表（支持按活跃状态过滤）
+    返回: (策略列表, 总记录数)
+    """
     query = db.query(Strategy)
     if portfolio_id:
         query = query.filter(Strategy.target_portfolio_id == portfolio_id)
     if is_active is not None:
         query = query.filter(Strategy.is_active == is_active)
-    strategies = query.order_by(Strategy.created_at.desc()).all()
-    return strategies
+
+    # 获取总数
+    total = query.count()
+
+    # 获取分页结果
+    strategies = query.order_by(Strategy.created_at.desc()).offset(skip).limit(limit).all()
+    return strategies, total
 
 @app.get("/api/strategies/active", response_model=List[StrategySchema])
 async def get_active_strategies(
@@ -925,9 +1059,158 @@ async def get_historical_market_data(
         )
 
 # Backtest endpoints
+# Backtest endpoints
+
+# 后台任务队列端点（新增 - 性能优化）
+@app.post("/api/backtest/submit")
+async def submit_backtest(
+    request: BacktestRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    提交回测到后台队列（异步执行）
+
+    优势：
+    - 立即返回，不阻塞用户操作
+    - 适合长时间运行的回测
+    - 支持查询回测进度
+
+    返回: job_id 用于后续查询
+    """
+    try:
+        from services.backtest_queue import backtest_queue
+
+        # 提交到后台队列
+        job_id = await backtest_queue.submit_backtest(request.model_dump(), db)
+
+        return {
+            "job_id": job_id,
+            "status": "pending",
+            "message": "回测已提交到后台队列",
+            "check_url": f"/api/backtest/status/{job_id}"
+        }
+    except Exception as e:
+        logger.error(f"提交回测任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"提交回测任务失败: {str(e)}")
+
+
+@app.get("/api/backtest/status/{job_id}")
+async def get_backtest_status(job_id: str):
+    """
+    查询回测任务状态
+
+    返回任务状态信息：
+    - pending: 等待执行
+    - running: 执行中
+    - completed: 已完成
+    - failed: 失败
+    """
+    try:
+        from services.backtest_queue import backtest_queue
+
+        status = backtest_queue.get_job_status(job_id)
+
+        if "error" in status and status["error"] == "任务不存在":
+            raise HTTPException(status_code=404, detail="回测任务不存在")
+
+        return status
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"查询回测状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"查询回测状态失败: {str(e)}")
+
+
+@app.get("/api/backtest/result/{job_id}", response_model=BacktestResult)
+async def get_backtest_result(job_id: str, db: Session = Depends(get_db)):
+    """
+    获取回测结果（仅在任务完成后可用）
+
+    返回完整的回测结果数据
+    """
+    try:
+        from services.backtest_queue import backtest_queue
+
+        status = backtest_queue.get_job_status(job_id)
+
+        if "error" in status and status["error"] == "任务不存在":
+            raise HTTPException(status_code=404, detail="回测任务不存在")
+
+        if status.get("status") != "completed":
+            raise HTTPException(
+                status_code=202,
+                detail=f"回测尚未完成。当前状态: {status.get('status')}",
+                headers={"Retry-After": "10"}
+            )
+
+        if status.get("error"):
+            raise HTTPException(
+                status_code=500,
+                detail=f"回测执行失败: {status.get('error')}"
+            )
+
+        # 返回结果
+        result = status.get("result")
+        if not result:
+            raise HTTPException(status_code=500, detail="回测结果不存在")
+
+        return BacktestResult(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取回测结果失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取回测结果失败: {str(e)}")
+
+
+@app.get("/api/backtest/queue-status")
+async def get_queue_status():
+    """
+    获取回测队列状态（管理员监控）
+
+    返回：
+    - total_jobs: 总任务数
+    - active_jobs: 活跃任务数
+    - jobs: 所有任务列表
+    """
+    try:
+        from services.backtest_queue import backtest_queue
+
+        all_jobs = backtest_queue.get_all_jobs()
+        active_jobs = backtest_queue.get_active_jobs()
+
+        return {
+            "total_jobs": len(all_jobs),
+            "active_jobs": len(active_jobs),
+            "pending": len([j for j in all_jobs if j["status"] == "pending"]),
+            "running": len([j for j in all_jobs if j["status"] == "running"]),
+            "completed": len([j for j in all_jobs if j["status"] == "completed"]),
+            "failed": len([j for j in all_jobs if j["status"] == "failed"]),
+        }
+    except Exception as e:
+        logger.error(f"获取队列状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取队列状态失败: {str(e)}")
+
+
+@app.post("/api/backtest/queue/clear")
+async def clear_completed_jobs():
+    """清除所有已完成的回测任务"""
+    try:
+        from services.backtest_queue import backtest_queue
+
+        backtest_queue.clear_completed_jobs()
+
+        return {"message": "已清除所有已完成的任务"}
+    except Exception as e:
+        logger.error(f"清除任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"清除任务失败: {str(e)}")
+
+
+# 原有的同步回测端点（保留向后兼容）
 @app.post("/api/backtest", response_model=BacktestResult)
+@monitor_performance
 async def run_backtest_endpoint(
-    request: BacktestRequest, 
+    request: BacktestRequest,
     db: Session = Depends(get_db),
     save_record: bool = Query(False, description="是否保存回测记录")
 ):
@@ -1035,6 +1318,7 @@ async def run_backtest_endpoint(
         raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
 
 @app.post("/api/backtest/optimize", response_model=ParameterOptimizationResult)
+@monitor_performance
 async def optimize_strategy_parameters(
     request: ParameterOptimizationRequest,
     db: Session = Depends(get_db)
@@ -1083,6 +1367,7 @@ async def optimize_strategy_parameters(
         raise HTTPException(status_code=500, detail=f"Parameter optimization failed: {str(e)}")
 
 @app.post("/api/backtest/analyze", response_model=AIStrategyAnalysisResponse)
+@monitor_performance
 async def analyze_backtest_result(
     request: AIStrategyAnalysisRequest,
     db: Session = Depends(get_db)
@@ -1386,11 +1671,19 @@ async def set_active_ai_model(model_id: int, db: Session = Depends(get_db)):
     }
 
 # Stock Pool endpoints
-@app.get("/api/stock-pools", response_model=List[StockPoolSchema])
-async def get_stock_pools(db: Session = Depends(get_db)):
-    """Get all stock pools"""
-    pools = db.query(StockPool).order_by(StockPool.created_at.desc()).all()
-    return pools
+@app.get("/api/stock-pools", response_model=Tuple[List[StockPoolSchema], int])
+async def get_stock_pools(
+    skip: int = Query(0, ge=0, description="跳过的记录数"),
+    limit: int = Query(20, ge=1, le=100, description="每页记录数"),
+    db: Session = Depends(get_db)
+):
+    """
+    分页获取所有股票池
+    返回: (股票池列表, 总记录数)
+    """
+    total = db.query(StockPool).count()
+    pools = db.query(StockPool).order_by(StockPool.created_at.desc()).offset(skip).limit(limit).all()
+    return pools, total
 
 @app.get("/api/stock-pools/{pool_id}", response_model=StockPoolSchema)
 async def get_stock_pool(pool_id: int, db: Session = Depends(get_db)):
@@ -1683,6 +1976,116 @@ async def reset_daily_limit():
         logger.error(f"Failed to reset daily limit: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to reset daily limit: {str(e)}")
 
+@app.get("/api/admin/db-pool-status")
+async def get_db_pool_status():
+    """获取数据库连接池状态（管理员监控）"""
+    try:
+        from database import engine
+        pool = engine.pool
+
+        # 获取连接池状态
+        pool_status = {
+            "pool_size": pool.size(),
+            "checked_in_connections": pool.checkedin(),
+            "checked_out_connections": pool.checkedout(),
+            "overflow": pool.overflow(),
+            "max_overflow": pool.max_overflow if hasattr(pool, 'max_overflow') else 0,
+            "status": "healthy" if pool.checkedout() < pool.size() + (pool.max_overflow if hasattr(pool, 'max_overflow') else 0) else "under_pressure",
+        }
+
+        # 添加连接池使用率
+        total_capacity = pool_status["pool_size"] + pool_status["max_overflow"]
+        if total_capacity > 0:
+            pool_status["utilization_percent"] = round((pool_status["checked_out_connections"] / total_capacity) * 100, 2)
+
+        return pool_status
+    except Exception as e:
+        logger.error(f"Failed to get DB pool status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get DB pool status: {str(e)}")
+
+@app.get("/api/admin/cache-status")
+async def get_cache_status():
+    """获取缓存状态（管理员监控）"""
+    try:
+        from services.hybrid_cache import hybrid_cache
+        from services.redis_cache import redis_cache
+
+        # 获取混合缓存统计
+        cache_stats = hybrid_cache.get_cache_stats()
+
+        # 添加 Redis 详细信息
+        if redis_cache.redis:
+            redis_detailed = redis_cache.get_stats()
+            cache_stats["redis_details"] = redis_detailed
+
+        return cache_stats
+    except Exception as e:
+        logger.error(f"Failed to get cache status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get cache status: {str(e)}")
+
+@app.post("/api/admin/cache/clear")
+async def clear_cache(
+    cache_type: Optional[str] = Query(None, description="缓存类型: quote, historical, stock_info, all")
+):
+    """清除指定类型的缓存"""
+    try:
+        from services.hybrid_cache import hybrid_cache
+
+        if cache_type == "all" or cache_type is None:
+            # 清除所有缓存
+            if redis_cache.redis:
+                patterns = ["quote:*", "historical:*", "stock_info:*"]
+                for pattern in patterns:
+                    redis_cache.clear_pattern(pattern)
+            hybrid_cache.quote_cache.clear()
+            hybrid_cache.historical_cache.clear()
+            hybrid_cache.stock_info_cache.clear()
+
+            return {"message": "已清除所有缓存"}
+        else:
+            # 清除特定类型缓存
+            if cache_type == "quote":
+                if redis_cache.redis:
+                    redis_cache.clear_pattern("quote:*")
+                hybrid_cache.quote_cache.clear()
+
+            elif cache_type == "historical":
+                if redis_cache.redis:
+                    redis_cache.clear_pattern("historical:*")
+                hybrid_cache.historical_cache.clear()
+
+            elif cache_type == "stock_info":
+                if redis_cache.redis:
+                    redis_cache.clear_pattern("stock_info:*")
+                hybrid_cache.stock_info_cache.clear()
+
+            return {"message": f"已清除 {cache_type} 缓存"}
+
+    except Exception as e:
+        logger.error(f"Failed to clear cache: {e}")
+        raise HTTPException(status_code=500, detail=f"清除缓存失败: {str(e)}")
+
+@app.get("/api/admin/metrics")
+async def get_app_metrics():
+    """获取应用性能指标（管理员监控）"""
+    try:
+        return metrics.get_metrics()
+    except Exception as e:
+        logger.error(f"Failed to get metrics: {e}")
+        raise HTTPException(status_code=500, detail=f"获取指标失败: {str(e)}")
+
+@app.get("/api/admin/slow-requests")
+async def get_slow_requests(limit: int = Query(10, ge=1, le=100, description="返回的慢请求数量")):
+    """获取慢请求列表（管理员监控）"""
+    try:
+        return {
+            "slow_requests": metrics.get_slow_requests(limit),
+            "total_count": len(metrics.slow_requests)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get slow requests: {e}")
+        raise HTTPException(status_code=500, detail=f"获取慢请求失败: {str(e)}")
+
 # Chat Strategy endpoints (策略提取与保存)
 @app.post("/api/ai/conversations/{conversation_id}/extract-strategies", response_model=List[ChatStrategySchema])
 async def extract_strategies(
@@ -1849,18 +2252,28 @@ async def get_benchmark_strategies():
         raise HTTPException(status_code=500, detail=f"Failed to get benchmark strategies: {str(e)}")
 
 # Backtest Symbol List endpoints (回测标的清单)
-@app.get("/api/backtest/symbol-lists", response_model=List[SymbolList])
+@app.get("/api/backtest/symbol-lists", response_model=Tuple[List[SymbolList], int])
 async def get_symbol_lists(
     is_active: Optional[bool] = None,
+    skip: int = Query(0, ge=0, description="跳过的记录数"),
+    limit: int = Query(20, ge=1, le=100, description="每页记录数"),
     db: Session = Depends(get_db)
 ):
-    """获取所有回测标的清单"""
+    """
+    分页获取所有回测标的清单
+    返回: (标的清单列表, 总记录数)
+    """
     try:
         query = db.query(BacktestSymbolList)
         if is_active is not None:
             query = query.filter(BacktestSymbolList.is_active == is_active)
-        lists = query.order_by(BacktestSymbolList.created_at.desc()).all()
-        return lists
+
+        # 获取总数
+        total = query.count()
+
+        # 获取分页结果
+        lists = query.order_by(BacktestSymbolList.created_at.desc()).offset(skip).limit(limit).all()
+        return lists, total
     except Exception as e:
         logger.error(f"Failed to get symbol lists: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get symbol lists: {str(e)}")

@@ -156,8 +156,8 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({
                 <h3 className="text-xl font-bold text-slate-200">策略优势</h3>
               </div>
               <ul className="space-y-3">
-                {analysis.strengths.map((strength, index) => (
-                  <li key={index} className="flex items-start gap-3">
+                {analysis.strengths.map((strength, idx) => (
+                  <li key={`strength-${idx}`} className="flex items-start gap-3">
                     <CheckCircle className="text-emerald-400 mt-0.5 flex-shrink-0" size={18} />
                     <span className="text-slate-300">{strength}</span>
                   </li>
@@ -174,8 +174,8 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({
                 <h3 className="text-xl font-bold text-slate-200">策略劣势</h3>
               </div>
               <ul className="space-y-3">
-                {analysis.weaknesses.map((weakness, index) => (
-                  <li key={index} className="flex items-start gap-3">
+                {analysis.weaknesses.map((weakness, idx) => (
+                  <li key={`weakness-${idx}`} className="flex items-start gap-3">
                     <AlertCircle className="text-red-400 mt-0.5 flex-shrink-0" size={18} />
                     <span className="text-slate-300">{weakness}</span>
                   </li>
@@ -192,8 +192,8 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({
                 <h3 className="text-xl font-bold text-slate-200">优化建议</h3>
               </div>
               <ul className="space-y-4">
-                {analysis.optimization_suggestions.map((suggestion, index) => (
-                  <li key={index} className="bg-slate-800 p-4 rounded-lg">
+                {analysis.optimization_suggestions.map((suggestion, idx) => (
+                  <li key={`suggestion-${idx}`} className="bg-slate-800 p-4 rounded-lg">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 flex-1">
                         <Lightbulb className="text-yellow-400 mt-0.5 flex-shrink-0" size={18} />
