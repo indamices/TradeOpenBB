@@ -10,6 +10,7 @@ import {
 import { Strategy, BacktestRequest, BacktestResult } from '../types';
 import { tradingService } from '../services/tradingService';
 import { ApiError } from '../services/apiClient';
+import { safePercent, safeCurrency, safeToFixed, formatMetric } from '../utils/format';
 import StockPoolManager from './StockPoolManager';
 import TimeRangeSelector from './TimeRangeSelector';
 import BacktestSymbolList from './BacktestSymbolList';
@@ -147,7 +148,7 @@ const BacktestLab: React.FC = () => {
   const drawdownData = useMemo(() => {
     return result?.drawdown_series?.map(item => ({
       date: new Date(item.date).toLocaleDateString(),
-      drawdown: (item.drawdown * 100).toFixed(2), // Convert to percentage
+      drawdown: formatMetric(item.drawdown * 100, '', 2), // Convert to percentage
     })) || [];
   }, [result]);
 
@@ -411,7 +412,7 @@ const BacktestLab: React.FC = () => {
                 <DollarSign size={20} className="text-blue-400" />
               </div>
               <h3 className={`text-2xl font-bold ${result.total_return >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {(result.total_return * 100).toFixed(2)}%
+                {safePercent(result.total_return)}
               </h3>
             </div>
 
@@ -421,7 +422,7 @@ const BacktestLab: React.FC = () => {
                 <TrendingUp size={20} className="text-emerald-400" />
               </div>
               <h3 className={`text-2xl font-bold ${result.annualized_return >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {(result.annualized_return * 100).toFixed(2)}%
+                {safePercent(result.annualized_return)}
               </h3>
             </div>
 
@@ -431,7 +432,7 @@ const BacktestLab: React.FC = () => {
                 <TrendingDown size={20} className="text-red-400" />
               </div>
               <h3 className="text-2xl font-bold text-red-400">
-                {(result.max_drawdown * 100).toFixed(2)}%
+                {safePercent(result.max_drawdown)}
               </h3>
             </div>
 
@@ -441,7 +442,7 @@ const BacktestLab: React.FC = () => {
                 <Target size={20} className="text-blue-400" />
               </div>
               <h3 className="text-2xl font-bold text-slate-200">
-                {result.sharpe_ratio.toFixed(2)}
+                {formatMetric(result.sharpe_ratio, '', 2)}
               </h3>
             </div>
 
@@ -452,7 +453,7 @@ const BacktestLab: React.FC = () => {
                   <BarChart3 size={20} className="text-purple-400" />
                 </div>
                 <h3 className="text-2xl font-bold text-slate-200">
-                  {result.sortino_ratio.toFixed(2)}
+                  {formatMetric(result.sortino_ratio, '', 2)}
                 </h3>
               </div>
             )}
@@ -474,7 +475,7 @@ const BacktestLab: React.FC = () => {
                   <Target size={20} className="text-emerald-400" />
                 </div>
                 <h3 className="text-2xl font-bold text-emerald-400">
-                  {(result.win_rate * 100).toFixed(2)}%
+                  {safePercent(result.win_rate)}
                 </h3>
               </div>
             )}
@@ -502,14 +503,20 @@ const BacktestLab: React.FC = () => {
                       textAnchor="end"
                       height={80}
                     />
-                    <YAxis 
-                      stroke="#64748b" 
+                    <YAxis
+                      stroke="#64748b"
                       tick={{ fill: '#94a3b8', fontSize: 12 }}
-                      tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+                      tickFormatter={(val) => {
+                        if (val === undefined || val === null || isNaN(val)) return '$0k';
+                        return `$${formatQuantity(val / 1000, 0)}k`;
+                      }}
                     />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
-                      formatter={(value: number) => [`$${value.toLocaleString()}`, '资产价值']}
+                      formatter={(value: number) => {
+                        if (value === undefined || value === null || isNaN(value)) return ['$0', '资产价值'];
+                        return [`$${value.toLocaleString()}`, '资产价值'];
+                      }}
                     />
                     <Area 
                       type="monotone" 
@@ -603,23 +610,23 @@ const BacktestLab: React.FC = () => {
                         <td className="px-6 py-4 text-slate-300">{stock.total_quantity_sold}</td>
                         <td className="px-6 py-4 text-slate-300">{stock.final_position}</td>
                         <td className="px-6 py-4 text-slate-300">
-                          ${stock.avg_buy_price?.toFixed(2) || '0.00'}
+                          {safeCurrency(stock.avg_buy_price)}
                         </td>
                         <td className="px-6 py-4 text-slate-300">
-                          ${stock.avg_sell_price?.toFixed(2) || '0.00'}
+                          {safeCurrency(stock.avg_sell_price)}
                         </td>
                         <td className="px-6 py-4 text-slate-400">
-                          ${stock.total_commission.toFixed(2)}
+                          {safeCurrency(stock.total_commission)}
                         </td>
                         <td className={`px-6 py-4 font-medium ${
                           stock.realized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                         }`}>
-                          ${stock.realized_pnl.toFixed(2)}
+                          {safeCurrency(stock.realized_pnl)}
                         </td>
                         <td className={`px-6 py-4 font-medium ${
                           stock.return_percent >= 0 ? 'text-emerald-400' : 'text-red-400'
                         }`}>
-                          {stock.return_percent.toFixed(2)}%
+                          {safePercent(stock.return_percent)}%
                         </td>
                       </tr>
                     ))}
@@ -697,10 +704,10 @@ const BacktestLab: React.FC = () => {
                         }`}>
                           {trade.side}
                         </td>
-                        <td className="px-6 py-4 text-slate-300">${trade.price.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-slate-300">{safeCurrency(trade.price)}</td>
                         <td className="px-6 py-4 text-slate-300">{trade.quantity}</td>
                         <td className="px-6 py-4 text-slate-400">
-                          ${trade.commission?.toFixed(2) || '0.00'}
+                          {safeCurrency(trade.commission)}
                         </td>
                         <td className="px-6 py-4 text-slate-400 text-sm max-w-xs truncate" title={trade.trigger_reason}>
                           {trade.trigger_reason || '-'}
@@ -711,7 +718,7 @@ const BacktestLab: React.FC = () => {
                             : 'text-slate-400'
                         }`}>
                           {trade.pnl !== null && trade.pnl !== undefined
-                            ? `$${trade.pnl.toFixed(2)}`
+                            ? safeCurrency(trade.pnl)
                             : '-'}
                         </td>
                         <td className={`px-6 py-4 font-medium ${
@@ -720,7 +727,7 @@ const BacktestLab: React.FC = () => {
                             : 'text-slate-400'
                         }`}>
                           {trade.pnl_percent !== null && trade.pnl_percent !== undefined
-                            ? `${trade.pnl_percent.toFixed(2)}%`
+                            ? safePercent(trade.pnl_percent)
                             : '-'}
                         </td>
                       </tr>

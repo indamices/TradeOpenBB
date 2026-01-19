@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { 
+import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
-import { 
+import {
   TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle,
-  BarChart3, Eye, ArrowUpRight, ArrowDownRight 
+  BarChart3, Eye, ArrowUpRight, ArrowDownRight
 } from 'lucide-react';
 import { Portfolio, Position, MarketQuote } from '../types';
 import { tradingService } from '../services/tradingService';
 import { ApiError } from '../services/apiClient';
+import { safeSignedPercent, safeCurrency, safeToFixed, formatMetric, formatDate } from '../utils/format';
 
 interface TechnicalIndicator {
   date: string;
@@ -401,11 +402,11 @@ const Dashboard: React.FC = () => {
                 <tr key={pos.id} className="hover:bg-slate-800/30 transition-colors">
                   <td className="px-6 py-4 font-bold text-slate-200">{pos.symbol}</td>
                   <td className="px-6 py-4 text-slate-300">{pos.quantity}</td>
-                  <td className="px-6 py-4 text-slate-400">${pos.avg_price.toFixed(2)}</td>
-                  <td className="px-6 py-4 text-slate-300">${pos.current_price.toFixed(2)}</td>
-                  <td className="px-6 py-4 text-slate-200">${pos.market_value.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-slate-400">{safeCurrency(pos.avg_price)}</td>
+                  <td className="px-6 py-4 text-slate-300">{safeCurrency(pos.current_price)}</td>
+                  <td className="px-6 py-4 text-slate-200">{safeCurrency(pos.market_value)}</td>
                   <td className={`px-6 py-4 font-medium ${pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {pos.unrealized_pnl >= 0 ? '+' : ''}${pos.unrealized_pnl.toFixed(2)} ({pos.unrealized_pnl_percent.toFixed(2)}%)
+                    {safeSignedCurrency(pos.unrealized_pnl)} ({safeSignedPercent(pos.unrealized_pnl_percent)})
                   </td>
                 </tr>
               ))}
@@ -440,14 +441,14 @@ const Dashboard: React.FC = () => {
                 {marketQuotes.map((quote) => (
                   <tr key={quote.symbol} className="hover:bg-slate-800/30 transition-colors">
                     <td className="px-6 py-4 font-bold text-slate-200">{quote.symbol}</td>
-                    <td className="px-6 py-4 text-slate-300">${quote.price.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-slate-300">{safeCurrency(quote.price)}</td>
                     <td className={`px-6 py-4 font-medium ${quote.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)}
+                      {formatMetric(quote.change, '', 2)}
                     </td>
                     <td className={`px-6 py-4 font-medium ${quote.change_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {quote.change_percent >= 0 ? '+' : ''}{quote.change_percent.toFixed(2)}%
+                      {safeSignedPercent(quote.change_percent)}
                     </td>
-                    <td className="px-6 py-4 text-slate-400">{quote.volume.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-slate-400">{formatQuantity(quote.volume, 0)}</td>
                   </tr>
                 ))}
               </tbody>
