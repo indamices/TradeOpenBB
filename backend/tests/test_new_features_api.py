@@ -18,8 +18,27 @@ except ImportError as e:
 
 @pytest.fixture
 def client():
-    """Create a test client"""
-    return TestClient(app)
+    """Create a test client with database initialization"""
+    from database import engine, SessionLocal
+    from models import Base
+
+    # Create all tables
+    Base.metadata.create_all(bind=engine)
+
+    def override_get_db():
+        try:
+            db = SessionLocal()
+            yield db
+        finally:
+            db.close()
+
+    from main import get_db
+    app.dependency_overrides[get_db] = override_get_db
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
 
 
 class TestBenchmarkStrategiesAPI:

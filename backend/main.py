@@ -21,8 +21,21 @@ import time
 # Use absolute imports for Docker deployment
 from database import get_db, init_db
 
-# Import monitoring and logging
+# Setup structured logging FIRST (before importing monitoring)
+import logging
+logger = logging.getLogger("tradeopenbb")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Now import monitoring (after logger is defined)
 from monitoring import setup_logging, log_requests_middleware, monitor_performance, metrics
+
+# Re-configure with proper setup
+logger = setup_logging()
+
 from models import Portfolio, Position, Order, Strategy, AIModelConfig, OrderSide, OrderType, OrderStatus, AIProvider, Base, StockPool, StockInfo, Conversation, ConversationMessage, ChatStrategy, BacktestSymbolList, DataSourceConfig, BacktestRecord
 from schemas import (
     Portfolio as PortfolioSchema, PortfolioCreate, PortfolioUpdate,
@@ -45,9 +58,6 @@ from market_service import get_realtime_quote, get_multiple_quotes, get_market_o
 from ai_service_factory import generate_strategy, chat_with_ai
 from backtest_engine import run_backtest
 from services.benchmark_strategies import list_benchmark_strategies
-
-# Setup structured logging
-logger = setup_logging()
 
 # Note: Conversation storage is now in database, but keeping this for backward compatibility during migration
 conversation_storage: Dict[str, List[Dict]] = {}
