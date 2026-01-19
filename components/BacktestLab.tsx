@@ -574,7 +574,7 @@ const BacktestLab: React.FC = () => {
           )}
 
           {/* Per-Stock Performance */}
-          {result.per_stock_performance && result.per_stock_performance.length > 0 && (
+          {result.per_stock_performance && Array.isArray(result.per_stock_performance) && result.per_stock_performance.length > 0 && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-800">
                 <h3 className="text-lg font-semibold text-slate-200">个股盈亏分析</h3>
@@ -598,7 +598,7 @@ const BacktestLab: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {result.per_stock_performance.map((stock, idx) => (
+                    {(result.per_stock_performance || []).map((stock, idx) => (
                       <tr key={`stock-perf-${stock.symbol}-${idx}`} className="hover:bg-slate-800/30 transition-colors">
                         <td className="px-6 py-4 font-bold text-slate-200">{stock.symbol}</td>
                         <td className="px-6 py-4 text-slate-300">{stock.total_trades}</td>

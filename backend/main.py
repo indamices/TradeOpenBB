@@ -2500,6 +2500,7 @@ async def get_data_sources_status(db: Session = Depends(get_db)):
         working_source_id = None
         
         for source in active_sources:
+            data_service = None
             try:
                 from services.data_service import DataService
                 import pandas as pd
@@ -2554,17 +2555,21 @@ async def get_data_sources_status(db: Session = Depends(get_db)):
                         "error": None
                     })
                 finally:
-                    data_service.close()
+                    if data_service:
+                        try:
+                            data_service.close()
+                        except Exception as close_error:
+                            logger.warning(f"Error closing data service for source {source.name}: {close_error}")
             except Exception as e:
                 error_msg = str(e)
                 logger.warning(f"Failed to test source {source.name} (ID: {source.id}, provider: {source.provider}): {error_msg}", exc_info=True)
                 status_list.append({
                     "source_id": source.id,
-                    "name": source.name,
-                    "provider": source.provider,
+                    "name": source.name if source else "Unknown",
+                    "provider": source.provider if source else None,
                     "is_working": False,
-                    "priority": source.priority,
-                    "is_default": source.is_default,
+                    "priority": source.priority if source else 0,
+                    "is_default": source.is_default if source else False,
                     "data_points": 0,
                     "error": error_msg[:200] if len(error_msg) > 200 else error_msg  # Truncate long error messages
                 })
