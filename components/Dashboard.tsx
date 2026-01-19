@@ -10,7 +10,7 @@ import {
 import { Portfolio, Position, MarketQuote } from '../types';
 import { tradingService } from '../services/tradingService';
 import { ApiError } from '../services/apiClient';
-import { safeSignedPercent, safeCurrency, safeToFixed, formatMetric, formatDate } from '../utils/format';
+import { safeSignedPercent, safeCurrency, safeSignedCurrency, safeToFixed, formatMetric, formatDate } from '../utils/format';
 
 interface TechnicalIndicator {
   date: string;
