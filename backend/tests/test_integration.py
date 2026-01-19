@@ -42,7 +42,9 @@ def test_portfolio_workflow(client, sample_portfolio_data):
     # Get positions
     positions_response = client.get(f"/api/positions?portfolio_id={portfolio_id}")
     assert positions_response.status_code == status.HTTP_200_OK
-    assert len(positions_response.json()) > 0
+    # 分页端点返回 (列表, 总数)
+    positions, total = positions_response.json()
+    assert len(positions) > 0
     
     # Get orders
     orders_response = client.get(f"/api/orders?portfolio_id={portfolio_id}")
@@ -56,11 +58,12 @@ def test_strategy_workflow(client, sample_strategy_data):
     assert create_response.status_code == status.HTTP_201_CREATED
     assert "id" in create_response.json(), f"Response missing 'id': {create_response.text}"
     strategy_id = create_response.json()["id"]
-    
+
     # Get all strategies
     strategies_response = client.get("/api/strategies")
     assert strategies_response.status_code == status.HTTP_200_OK
-    strategies = strategies_response.json()
+    # 分页端点返回 (列表, 总数)
+    strategies, total = strategies_response.json()
     assert any(s["id"] == strategy_id for s in strategies)
 
 def test_ai_model_workflow(client, sample_ai_model_data):

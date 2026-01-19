@@ -8,7 +8,10 @@ def test_get_strategies_empty(client):
     """Test getting strategies when none exist"""
     response = client.get("/api/strategies")
     assert response.status_code == status.HTTP_200_OK
-    assert response.json() == []
+    # 分页端点返回 (列表, 总数)
+    strategies, total = response.json()
+    assert strategies == []
+    assert total == 0
 
 def test_create_strategy(client, sample_strategy_data):
     """Test creating a strategy"""
@@ -23,12 +26,14 @@ def test_get_strategies(client, sample_strategy_data):
     """Test getting all strategies"""
     # Create a strategy
     client.post("/api/strategies", json=sample_strategy_data)
-    
+
     # Get all strategies
     response = client.get("/api/strategies")
     assert response.status_code == status.HTTP_200_OK
-    strategies = response.json()
+    # 分页端点返回 (列表, 总数)
+    strategies, total = response.json()
     assert len(strategies) == 1
+    assert total == 1
     assert strategies[0]["name"] == sample_strategy_data["name"]
 
 def test_generate_strategy_mock(client):
@@ -122,14 +127,16 @@ def test_delete_strategy(client, sample_strategy_data):
     # Create a strategy
     create_response = client.post("/api/strategies", json=sample_strategy_data)
     strategy_id = create_response.json()["id"]
-    
+
     # Delete it
     response = client.delete(f"/api/strategies/{strategy_id}")
     assert response.status_code == status.HTTP_204_NO_CONTENT
-    
+
     # Verify it's deleted
     get_response = client.get("/api/strategies")
-    assert strategy_id not in [s["id"] for s in get_response.json()]
+    # 分页端点返回 (列表, 总数)
+    strategies, total = get_response.json()
+    assert strategy_id not in [s["id"] for s in strategies]
 
 def test_get_nonexistent_strategy(client):
     """Test getting non-existent strategy"""

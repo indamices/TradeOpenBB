@@ -18,6 +18,10 @@ except ImportError:
     from models import Strategy
     from services.data_service import DataService
 
+# 配置基本日志（如果未配置）
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 def extract_trigger_reason(signal: int, strategy_code: str, historical_data: pd.DataFrame, symbol: str) -> str:
