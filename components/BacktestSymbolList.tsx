@@ -84,7 +84,7 @@ const BacktestSymbolList: React.FC<BacktestSymbolListProps> = ({
     setForm({
       name: list.name,
       description: list.description || '',
-      symbols: list.symbols.join(', ')
+      symbols: (list.symbols || []).join(', ')
     });
     setShowCreateDialog(true);
   };

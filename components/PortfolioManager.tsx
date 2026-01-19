@@ -254,7 +254,7 @@ const PortfolioManager: React.FC = () => {
               <input
                 type="number"
                 value={positionForm.quantity || ''}
-                onChange={(e) => setPositionForm({ ...positionForm, quantity: parseInt(e.target.value) || 0 })}
+                onChange={(e) => setPositionForm({ ...positionForm, quantity: parseInt(e.target.value, 10) || 0 })}
                 min="1"
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="100"

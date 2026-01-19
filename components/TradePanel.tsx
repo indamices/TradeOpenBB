@@ -129,7 +129,7 @@ const TradePanel: React.FC = () => {
                 type="number" 
                 min="1"
                 value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value))}
+                onChange={(e) => setQuantity(parseInt(e.target.value, 10))}
                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white"
               />
             </div>

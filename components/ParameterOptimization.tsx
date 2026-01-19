@@ -210,7 +210,7 @@ const ParameterOptimization: React.FC<ParameterOptimizationProps> = ({
             </label>
             <select
               value={selectedStrategyId || ''}
-              onChange={(e) => setSelectedStrategyId(parseInt(e.target.value))}
+              onChange={(e) => setSelectedStrategyId(parseInt(e.target.value, 10))}
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               disabled={loading}
             >

@@ -161,7 +161,7 @@ const StrategyLab: React.FC = () => {
               <select
                 value={selectedModelId || ''}
                 onChange={async (e) => {
-                  const modelId = e.target.value ? parseInt(e.target.value) : undefined;
+                  const modelId = e.target.value ? parseInt(e.target.value, 10) : undefined;
                   setSelectedModelId(modelId);
                   // Set as active model
                   if (modelId) {
