@@ -5,17 +5,17 @@ import Dashboard from './components/Dashboard';  // 保留默认路由立即加�
 
 // 懒加载非关键路由（按需加载，减少初始 bundle 大小）
 // 优化：主 bundle 大小将从 670KB 减少到约 350KB（48% 减少）
-const BacktestLab = lazy(() => import('./components/BacktestLab').then(m => ({ default: m.BacktestLab })));
-const BacktestRecords = lazy(() => import('./components/BacktestRecords').then(m => ({ default: m.BacktestRecords })));
-const ParameterOptimization = lazy(() => import('./components/ParameterOptimization').then(m => ({ default: m.ParameterOptimization })));
-const AIChatAssistant = lazy(() => import('./components/AIChatAssistant').then(m => ({ default: m.AIChatAssistant })));
-const StrategyLab = lazy(() => import('./components/StrategyLab').then(m => ({ default: m.StrategyLab })));
-const StrategyManager = lazy(() => import('./components/StrategyManager').then(m => ({ default: m.StrategyManager })));
-const AIModelSettings = lazy(() => import('./components/AIModelSettings').then(m => ({ default: m.AIModelSettings })));
-const PortfolioManager = lazy(() => import('./components/PortfolioManager').then(m => ({ default: m.PortfolioManager })));
-const DataSourceManager = lazy(() => import('./components/DataSourceManager').then(m => ({ default: m.DataSourceManager })));
-const StockPoolManager = lazy(() => import('./components/StockPoolManager').then(m => ({ default: m.StockPoolManager })));
-const HistoricalDataViewer = lazy(() => import('./components/HistoricalDataViewer').then(m => ({ default: m.HistoricalDataViewer })));
+const BacktestLab = lazy(() => import('./components/BacktestLab'));
+const BacktestRecords = lazy(() => import('./components/BacktestRecords'));
+const ParameterOptimization = lazy(() => import('./components/ParameterOptimization'));
+const AIChatAssistant = lazy(() => import('./components/AIChatAssistant'));
+const StrategyLab = lazy(() => import('./components/StrategyLab'));
+const StrategyManager = lazy(() => import('./components/StrategyManager'));
+const AIModelSettings = lazy(() => import('./components/AIModelSettings'));
+const PortfolioManager = lazy(() => import('./components/PortfolioManager'));
+const DataSourceManager = lazy(() => import('./components/DataSourceManager'));
+const StockPoolManager = lazy(() => import('./components/StockPoolManager'));
+const HistoricalDataViewer = lazy(() => import('./components/HistoricalDataViewer'));
 
 /**
  * 加载回退组件
