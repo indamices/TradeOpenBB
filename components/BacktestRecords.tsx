@@ -6,6 +6,7 @@ import {
 import { BacktestRecord, Strategy } from '../types';
 import { tradingService } from '../services/tradingService';
 import { ApiError } from '../services/apiClient';
+import { formatMetric, formatDate } from '../utils/format';
 
 interface BacktestRecordsProps {
   strategyId?: number;
@@ -136,15 +137,6 @@ const BacktestRecords: React.FC<BacktestRecordsProps> = ({
     }
     return true;
   });
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('zh-CN');
-  };
-
-  const formatMetric = (value: number | undefined, unit: string = '') => {
-    if (value === undefined || value === null) return '-';
-    return `${value.toFixed(2)}${unit}`;
-  };
 
   return (
     <div className="space-y-6">

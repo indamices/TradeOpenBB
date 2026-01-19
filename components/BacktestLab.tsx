@@ -10,7 +10,7 @@ import {
 import { Strategy, BacktestRequest, BacktestResult } from '../types';
 import { tradingService } from '../services/tradingService';
 import { ApiError } from '../services/apiClient';
-import { safePercent, safeCurrency, safeToFixed, formatMetric } from '../utils/format';
+import { safePercent, safeCurrency, safeToFixed, formatMetric, formatQuantity } from '../utils/format';
 import StockPoolManager from './StockPoolManager';
 import TimeRangeSelector from './TimeRangeSelector';
 import BacktestSymbolList from './BacktestSymbolList';

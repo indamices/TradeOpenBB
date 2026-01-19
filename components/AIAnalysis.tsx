@@ -6,6 +6,7 @@ import {
 import { BacktestResult, Strategy, AIStrategyAnalysisResponse } from '../types';
 import { tradingService } from '../services/tradingService';
 import { ApiError } from '../services/apiClient';
+import { formatMetric } from '../utils/format';
 
 interface AIAnalysisProps {
   backtestResult: BacktestResult;
@@ -42,11 +43,6 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatMetric = (value: number | undefined, unit: string = '') => {
-    if (value === undefined) return '-';
-    return `${value.toFixed(2)}${unit}`;
   };
 
   return (
