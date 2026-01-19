@@ -135,9 +135,9 @@ const TradePanel: React.FC = () => {
             </div>
             <div className="flex-1">
               <label className="block text-xs text-slate-500 mb-1">Order Type</label>
-              <select 
-                value={orderType} 
-                onChange={(e) => setOrderType(e.target.value as any)}
+              <select
+                value={orderType}
+                onChange={(e) => setOrderType(e.target.value as 'MARKET' | 'LIMIT')}
                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white"
               >
                 <option value="MARKET">Market</option>

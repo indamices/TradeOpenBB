@@ -41,6 +41,13 @@ const StockPoolManager: React.FC<StockPoolManagerProps> = ({
   useEffect(() => {
     loadPools();
     loadPopularStocks();
+
+    // Cleanup function to clear timeout on unmount
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
   }, []);
 
   const loadPopularStocks = async () => {

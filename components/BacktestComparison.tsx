@@ -443,7 +443,7 @@ const BacktestComparison: React.FC<BacktestComparisonProps> = ({
                           }`}
                         >
                           {outperformance >= 0 ? '+' : ''}
-                          {outperformance.toFixed(2)}%
+                          {isNaN(outperformance) ? 'N/A' : outperformance.toFixed(2)}%
                         </span>
                       </div>
                     );

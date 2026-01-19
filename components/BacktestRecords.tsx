@@ -83,22 +83,34 @@ const BacktestRecords: React.FC<BacktestRecordsProps> = ({
   };
 
   const handleExport = async (recordId: number, format: 'csv' | 'excel') => {
+    let url: string | null = null;
     try {
       const blob = format === 'csv'
         ? await tradingService.exportBacktestRecordCSV(recordId)
         : await tradingService.exportBacktestRecordExcel(recordId);
 
-      const url = window.URL.createObjectURL(blob);
+      url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `backtest_record_${recordId}.${format === 'csv' ? 'csv' : 'xlsx'}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+
+      // Revoke ObjectURL after a short delay to ensure download starts
+      setTimeout(() => {
+        if (url) window.URL.revokeObjectURL(url);
+      }, 100);
     } catch (err) {
       const apiError = err as ApiError;
       alert(apiError.detail || '导出失败');
+    } finally {
+      // Ensure cleanup even if error occurs
+      if (url) {
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+        }, 100);
+      }
     }
   };
 

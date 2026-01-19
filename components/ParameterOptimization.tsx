@@ -1,13 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Settings, Play, Loader2, TrendingUp, Target, AlertCircle, 
-  CheckCircle, X, Plus, Trash2, BarChart3 
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Settings, Play, Loader2, TrendingUp, Target, AlertCircle,
+  CheckCircle, X, Plus, Trash2, BarChart3
 } from 'lucide-react';
 import { Strategy, ParameterOptimizationRequest, ParameterOptimizationResult } from '../types';
 import { tradingService } from '../services/tradingService';
 import { ApiError } from '../services/apiClient';
 import TimeRangeSelector from './TimeRangeSelector';
 import BacktestSymbolList from './BacktestSymbolList';
+
+/**
+ * Deep comparison function for objects
+ * More efficient than JSON.stringify and handles key ordering correctly
+ */
+function deepEqual(obj1: Record<string, any>, obj2: Record<string, any>): boolean {
+  const keys1 = Object.keys(obj1).sort();
+  const keys2 = Object.keys(obj2).sort();
+
+  if (keys1.length !== keys2.length) return false;
+
+  for (let i = 0; i < keys1.length; i++) {
+    const key = keys1[i];
+    if (key !== keys2[i]) return false;
+    if (obj1[key] !== obj2[key]) return false;
+  }
+
+  return true;
+}
 
 interface ParameterRange {
   name: string;
@@ -274,7 +293,7 @@ const ParameterOptimization: React.FC<ParameterOptimizationProps> = ({
             </label>
             <select
               value={optimizationMetric}
-              onChange={(e) => setOptimizationMetric(e.target.value as any)}
+              onChange={(e) => setOptimizationMetric(e.target.value as 'sharpe_ratio' | 'total_return' | 'annualized_return' | 'sortino_ratio')}
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               disabled={loading}
             >
@@ -448,7 +467,7 @@ const ParameterOptimization: React.FC<ParameterOptimizationProps> = ({
                 </thead>
                 <tbody>
                   {result.results.slice(0, 20).map((item, idx) => {
-                    const isBest = JSON.stringify(item.parameters) === JSON.stringify(result.best_parameters);
+                    const isBest = deepEqual(item.parameters, result.best_parameters);
                     return (
                       <tr
                         key={`result-${idx}`}

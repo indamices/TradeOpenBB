@@ -103,6 +103,11 @@ const HistoricalDataViewer: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
+    // Revoke ObjectURL after a short delay to ensure download starts
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 100);
   };
 
   const formatNumber = (num: number | null | undefined): string => {

@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session
 import logging
 import math
 import re
+import ast
+import signal
+from contextlib import contextmanager
 
 try:
     from .schemas import BacktestRequest, BacktestResult
@@ -23,6 +26,157 @@ if not logging.getLogger().handlers:
     logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
+
+
+class TimeoutException(Exception):
+    """Exception raised when code execution times out"""
+    pass
+
+
+@contextmanager
+def timeout_context(seconds: int):
+    """Context manager to limit execution time"""
+    def timeout_handler(signum, frame):
+        raise TimeoutException(f"Code execution exceeded {seconds} seconds")
+
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+
+def validate_strategy_code(code: str) -> tuple[bool, str]:
+    """
+    Validate strategy code for security issues
+
+    Args:
+        code: Strategy code to validate
+
+    Returns:
+        (is_valid, error_message)
+    """
+    # Check for dangerous imports and operations
+    dangerous_patterns = [
+        (r'\bimport\s+os\b', 'os module import not allowed'),
+        (r'\bimport\s+sys\b', 'sys module import not allowed'),
+        (r'\bimport\s+subprocess\b', 'subprocess module import not allowed'),
+        (r'\bfrom\s+os\s+import', 'os module import not allowed'),
+        (r'\bfrom\s+sys\s+import', 'sys module import not allowed'),
+        (r'\bfrom\s+subprocess\s+import', 'subprocess module import not allowed'),
+        (r'\bexec\s*\(', 'exec() function not allowed'),
+        (r'\beval\s*\(', 'eval() function not allowed'),
+        (r'\b__import__\s*\(', '__import__() function not allowed'),
+        (r'\bopen\s*\(', 'open() function not allowed'),
+        (r'\bcompile\s*\(', 'compile() function not allowed'),
+        (r'\\b__', 'Double underscore attributes not allowed (magic methods)'),
+        (r'\bglobals\s*\(', 'globals() function not allowed'),
+        (r'\blocals\s*\(', 'locals() function not allowed'),
+        (r'\bvars\s*\(', 'vars() function not allowed'),
+        (r'\\bgetattr\\s*\\(', 'getattr() function not allowed'),
+        (r'\\bsetattr\\s*\\(', 'setattr() function not allowed'),
+        (r'\\bdelattr\\s*\\(', 'delattr() function not allowed'),
+    ]
+
+    for pattern, error_msg in dangerous_patterns:
+        if re.search(pattern, code):
+            return False, f"Security violation: {error_msg}"
+
+    # Try to parse the code to ensure it's valid Python
+    try:
+        ast.parse(code)
+    except SyntaxError as e:
+        return False, f"Syntax error: {str(e)}"
+
+    # Check code length to prevent DoS
+    if len(code) > 10000:  # 10KB limit
+        return False, "Code too long (max 10KB)"
+
+    return True, ""
+
+
+def execute_strategy_code_safely(strategy_code: str, historical_data: pd.DataFrame, timeout: int = 5) -> tuple[Any, str]:
+    """
+    Safely execute user-provided strategy code with restrictions
+
+    Args:
+        strategy_code: User-provided strategy code
+        historical_data: Historical price data
+        timeout: Maximum execution time in seconds
+
+    Returns:
+        (signal, error_message) - signal is the trading signal, error_message is empty if successful
+    """
+    # Validate code first
+    is_valid, error_msg = validate_strategy_code(strategy_code)
+    if not is_valid:
+        logger.error(f"Strategy code validation failed: {error_msg}")
+        return 0, error_msg
+
+    # Create restricted namespace with only safe operations
+    safe_namespace = {
+        # Only provide pandas and numpy with restricted access
+        'pd': pd,
+        'np': np,
+        'df': historical_data,
+        # Mathematical functions
+        'math': math,
+        # Built-in functions (safe subset)
+        'len': len,
+        'str': str,
+        'int': int,
+        'float': float,
+        'bool': bool,
+        'list': list,
+        'dict': dict,
+        'tuple': tuple,
+        'range': range,
+        'min': min,
+        'max': max,
+        'abs': abs,
+        'round': round,
+        'sum': sum,
+        'sorted': sorted,
+        'enumerate': enumerate,
+        'zip': zip,
+        'any': any,
+        'all': all,
+        # Constants
+        'True': True,
+        'False': False,
+        'None': None,
+    }
+
+    try:
+        # Execute with timeout
+        with timeout_context(timeout):
+            exec(strategy_code, safe_namespace)
+
+        # Extract signal from namespace
+        if 'signal' not in safe_namespace:
+            return 0, "Strategy code must define a 'signal' variable"
+
+        signal = safe_namespace['signal']
+
+        # Validate signal value
+        if not isinstance(signal, (int, float, np.number)):
+            return 0, f"Signal must be a number, got {type(signal).__name__}"
+
+        signal_value = int(signal)
+        if signal_value not in [-1, 0, 1]:
+            return 0, f"Signal must be -1, 0, or 1, got {signal_value}"
+
+        logger.info(f"Strategy executed successfully, signal: {signal_value}")
+        return signal_value, ""
+
+    except TimeoutException as e:
+        logger.error(f"Strategy execution timeout: {e}")
+        return 0, f"Execution timeout: {e}"
+    except Exception as e:
+        logger.error(f"Strategy execution error: {e}", exc_info=True)
+        return 0, f"Execution error: {str(e)}"
 
 def extract_trigger_reason(signal: int, strategy_code: str, historical_data: pd.DataFrame, symbol: str) -> str:
     """
@@ -536,25 +690,17 @@ async def run_backtest(request: BacktestRequest, db: Session, strategy: Optional
                 historical_data = df.loc[:date].copy()
                 
                 try:
-                    # Execute strategy code (sandboxed)
-                    # Note: In production, this should be done in a secure sandbox
-                    strategy_func = compile(strategy.logic_code, '<string>', 'exec')
-                    namespace = {
-                        'pd': pd,
-                        'np': np,
-                        'df': historical_data
-                    }
-                    exec(strategy_func, namespace)
-                    
-                    # Get signal from strategy
-                    if 'signal' in namespace:
-                        signal = namespace['signal']
-                    elif 'strategy_logic' in namespace:
-                        signal_series = namespace['strategy_logic'](historical_data)
-                        signal = int(signal_series.iloc[-1]) if hasattr(signal_series, 'iloc') else int(signal_series[-1])
-                    else:
-                        signal = 0
-                    
+                    # Execute strategy code safely with validation and timeout
+                    signal, error_msg = execute_strategy_code_safely(
+                        strategy.logic_code,
+                        historical_data,
+                        timeout=5  # 5 second timeout per strategy execution
+                    )
+
+                    if error_msg:
+                        logger.error(f"Strategy execution failed for {symbol} on {date}: {error_msg}")
+                        signal = 0  # Default to hold on error
+
                     # Extract trigger reason (rule-based)
                     trigger_reason = extract_trigger_reason(signal, strategy.logic_code, historical_data, symbol)
                     
