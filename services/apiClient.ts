@@ -30,9 +30,20 @@ class ApiClient {
       const response = await fetch(url, config);
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        let errorData: any = { detail: response.statusText };
+        try {
+          const text = await response.text();
+          if (text) {
+            errorData = JSON.parse(text);
+          }
+        } catch (parseError) {
+          // If JSON parsing fails, log the raw response for debugging
+          console.warn('Failed to parse error response as JSON:', parseError);
+          // Keep default errorData with statusText
+        }
+        
         const error: ApiError = {
-          detail: errorData.detail || errorData.message || `HTTP ${response.status}`,
+          detail: errorData.detail || errorData.message || `HTTP ${response.status}: ${response.statusText}`,
           status: response.status,
         };
         throw error;

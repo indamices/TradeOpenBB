@@ -17,6 +17,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from typing import List, Optional, Dict, Tuple
 import logging
 import time
+import os
+from pathlib import Path
 
 # Use absolute imports for Docker deployment
 from database import get_db, init_db
@@ -58,6 +60,21 @@ from market_service import get_realtime_quote, get_multiple_quotes, get_market_o
 from ai_service_factory import generate_strategy, chat_with_ai
 from backtest_engine import run_backtest
 from services.benchmark_strategies import list_benchmark_strategies
+
+# CORS Configuration - centralized to avoid duplication
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",  # Vite default port
+    "https://tradeopenbb-frontend.onrender.com",  # Render frontend
+]
+
+ALLOWED_ORIGIN_REGEX = r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app"
+
+# Debug log file path - use environment variable or default to .cursor/debug.log in project root
+DEBUG_LOG_FILE = os.getenv(
+    "DEBUG_LOG_FILE",
+    str(Path(__file__).parent.parent / ".cursor" / "debug.log")
+)
 
 # Note: Conversation storage is now in database, but keeping this for backward compatibility during migration
 conversation_storage: Dict[str, List[Dict]] = {}
@@ -194,15 +211,10 @@ async def general_exception_handler(request: Request, exc: Exception):
     origin = request.headers.get("origin")
     if origin:
         # Check if origin is allowed
-        allowed_origins = [
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "https://tradeopenbb-frontend.onrender.com",
-        ]
         import re
-        origin_pattern = re.compile(r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app")
+        origin_pattern = re.compile(ALLOWED_ORIGIN_REGEX)
         
-        if origin in allowed_origins or origin_pattern.match(origin):
+        if origin in ALLOWED_ORIGINS or origin_pattern.match(origin):
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "*"
@@ -224,12 +236,8 @@ import re
 # Note: In production, we need to allow the specific frontend domain
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",  # Vite default port
-        "https://tradeopenbb-frontend.onrender.com",  # Render frontend
-    ],
-    allow_origin_regex=r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app",
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],  # Explicitly list all methods
     allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With", "X-CSRFToken"],  # Explicit headers
@@ -242,39 +250,14 @@ app.add_middleware(
 @app.middleware("http")
 async def cors_ensuring_middleware(request: Request, call_next):
     """Ensure CORS headers on all responses, including errors"""
-    import json
-    import os
-    import time
-    
-    # #region agent log
-    log_file = r'c:\Users\Administrator\online-game\TradeOpenBB\.cursor\debug.log'
-    log_data = {
-        'location': 'main.py:cors_ensuring_middleware',
-        'message': 'CORS middleware entry',
-        'data': {'method': request.method, 'path': str(request.url.path), 'origin': request.headers.get('origin')},
-        'timestamp': time.time() * 1000,
-        'sessionId': 'debug-session',
-        'runId': 'run1',
-        'hypothesisId': 'A'
-    }
-    try:
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(log_data) + '\n')
-    except: pass
-    # #endregion
+    import re
     
     # Handle OPTIONS preflight requests explicitly
     if request.method == "OPTIONS":
         origin = request.headers.get("origin")
-        allowed_origins = [
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "https://tradeopenbb-frontend.onrender.com",
-        ]
-        import re
-        origin_pattern = re.compile(r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app")
+        origin_pattern = re.compile(ALLOWED_ORIGIN_REGEX)
         
-        if origin and (origin in allowed_origins or origin_pattern.match(origin)):
+        if origin and (origin in ALLOWED_ORIGINS or origin_pattern.match(origin)):
             from fastapi.responses import Response
             response = Response()
             response.headers["Access-Control-Allow-Origin"] = origin
@@ -282,21 +265,6 @@ async def cors_ensuring_middleware(request: Request, call_next):
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With, X-CSRFToken"
             response.headers["Access-Control-Max-Age"] = "3600"
-            # #region agent log
-            log_data = {
-                'location': 'main.py:cors_ensuring_middleware',
-                'message': 'OPTIONS preflight handled',
-                'data': {'origin': origin, 'headers_set': True, 'path': str(request.url.path)},
-                'timestamp': time.time() * 1000,
-                'sessionId': 'debug-session',
-                'runId': 'run1',
-                'hypothesisId': 'A'
-            }
-            try:
-                with open(log_file, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps(log_data) + '\n')
-            except: pass
-            # #endregion
             return response
     
     # Let CORSMiddleware handle other requests, then ensure headers on response
@@ -305,29 +273,12 @@ async def cors_ensuring_middleware(request: Request, call_next):
     # Ensure CORS headers are present on all responses (including errors that CORSMiddleware might miss)
     origin = request.headers.get("origin")
     if origin and "Access-Control-Allow-Origin" not in response.headers:
-        allowed_origins = ["http://localhost:3000", "http://localhost:5173", "https://tradeopenbb-frontend.onrender.com"]
-        import re
-        origin_pattern = re.compile(r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app")
-        if origin in allowed_origins or origin_pattern.match(origin):
+        origin_pattern = re.compile(ALLOWED_ORIGIN_REGEX)
+        if origin in ALLOWED_ORIGINS or origin_pattern.match(origin):
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With, X-CSRFToken"
-            # #region agent log
-            log_data = {
-                'location': 'main.py:cors_ensuring_middleware',
-                'message': 'CORS headers added to response',
-                'data': {'origin': origin, 'path': str(request.url.path), 'status_code': response.status_code},
-                'timestamp': time.time() * 1000,
-                'sessionId': 'debug-session',
-                'runId': 'run1',
-                'hypothesisId': 'A'
-            }
-            try:
-                with open(log_file, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps(log_data) + '\n')
-            except: pass
-            # #endregion
 
     return response
 

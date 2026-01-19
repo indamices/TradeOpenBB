@@ -36,33 +36,32 @@ const DataSourceManager: React.FC = () => {
 
   const loadDataSourcesStatus = async () => {
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/dc4e0f5f-b6dc-4e04-b23f-4972df130301',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataSourceManager.tsx:37',message:'loadDataSourcesStatus called',data:{sourceStatusesDefined:typeof sourceStatuses!=='undefined',setSourceStatusesDefined:typeof setSourceStatuses!=='undefined'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       const status = await dataSourceService.getDataSourcesStatus();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/dc4e0f5f-b6dc-4e04-b23f-4972df130301',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataSourceManager.tsx:39',message:'getDataSourcesStatus response received',data:{statusCount:status.sources?.length||0,workingId:status.working_source_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       const statusMap: { [key: number]: { is_working: boolean; working_source_id?: number } } = {};
-      status.sources.forEach(s => {
-        statusMap[s.source_id] = { is_working: s.is_working };
-      });
-      if (status.working_source_id) {
-        Object.keys(statusMap).forEach(id => {
-          if (parseInt(id) === status.working_source_id) {
-            statusMap[parseInt(id)].working_source_id = status.working_source_id;
+      
+      // Add null check for status.sources
+      if (status?.sources && Array.isArray(status.sources)) {
+        status.sources.forEach(s => {
+          if (s?.source_id !== undefined) {
+            statusMap[s.source_id] = { is_working: s.is_working ?? false };
           }
         });
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/dc4e0f5f-b6dc-4e04-b23f-4972df130301',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataSourceManager.tsx:51',message:'Setting sourceStatuses state',data:{statusMapSize:Object.keys(statusMap).length,setSourceStatusesDefined:typeof setSourceStatuses!=='undefined'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
+      
+      if (status?.working_source_id) {
+        Object.keys(statusMap).forEach(id => {
+          const sourceId = parseInt(id, 10);
+          if (sourceId === status.working_source_id) {
+            statusMap[sourceId].working_source_id = status.working_source_id;
+          }
+        });
+      }
+      
       setSourceStatuses(statusMap);
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/dc4e0f5f-b6dc-4e04-b23f-4972df130301',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataSourceManager.tsx:54',message:'loadDataSourcesStatus error',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       console.error('Failed to load data sources status:', err);
+      // Set empty status map on error to prevent undefined errors
+      setSourceStatuses({});
     }
   };
 
@@ -95,6 +94,7 @@ const DataSourceManager: React.FC = () => {
       setError(null);
       await dataSourceService.createDataSource(formData);
       await loadDataSources();
+      await loadDataSourcesStatus();
       setShowAddForm(false);
       setFormData({
         name: '',
@@ -120,6 +120,7 @@ const DataSourceManager: React.FC = () => {
       setError(null);
       await dataSourceService.updateDataSource(id, data);
       await loadDataSources();
+      await loadDataSourcesStatus();
       setEditingId(null);
     } catch (err) {
       const apiError = err as ApiError;
@@ -149,6 +150,7 @@ const DataSourceManager: React.FC = () => {
       setError(null);
       await dataSourceService.updateDataSource(id, { is_default: true });
       await loadDataSources();
+      await loadDataSourcesStatus();
     } catch (err) {
       const apiError = err as ApiError;
       setError(apiError.detail || 'Failed to set default data source');
@@ -161,6 +163,7 @@ const DataSourceManager: React.FC = () => {
       setError(null);
       await dataSourceService.updateDataSource(id, { is_active: !currentStatus });
       await loadDataSources();
+      await loadDataSourcesStatus();
     } catch (err) {
       const apiError = err as ApiError;
       setError(apiError.detail || 'Failed to toggle active status');
@@ -180,11 +183,12 @@ const DataSourceManager: React.FC = () => {
         is_active: false,  // Inactive by default until API key is set
         is_default: false,
         priority: 0,
-        supports_markets: source.supports_markets,
-        rate_limit: source.rate_limit
+        supports_markets: source.supports_markets || ['US'],
+        rate_limit: source.rate_limit || 100
       };
       await dataSourceService.createDataSource(createData);
       await loadDataSources();
+      await loadDataSourcesStatus();
     } catch (err) {
       const apiError = err as ApiError;
       setError(apiError.detail || 'Failed to add data source');
@@ -242,7 +246,12 @@ const DataSourceManager: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-400 mb-2">类型</label>
                 <select
                   value={formData.source_type}
-                  onChange={(e) => setFormData({ ...formData, source_type: e.target.value as any })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (['free', 'paid', 'api', 'direct'].includes(value)) {
+                      setFormData({ ...formData, source_type: value as 'free' | 'paid' | 'api' | 'direct' });
+                    }
+                  }}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="free">免费</option>
@@ -367,7 +376,7 @@ const DataSourceManager: React.FC = () => {
                 </div>
                 <div className="text-xs text-slate-500 space-y-1 mt-2">
                   <div>提供商: {source.provider}</div>
-                  <div>支持市场: {source.supports_markets.join(', ')}</div>
+                  <div>支持市场: {source.supports_markets?.join(', ') || 'N/A'}</div>
                   <div>速率限制: {source.rate_limit} 请求/分钟</div>
                   {source.requires_api_key && (
                     <div className="text-yellow-400">
@@ -421,13 +430,7 @@ const DataSourceManager: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {dataSources.map((source) => {
-                  // #region agent log
-                  try {
-                    fetch('http://127.0.0.1:7242/ingest/dc4e0f5f-b6dc-4e04-b23f-4972df130301',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataSourceManager.tsx:425',message:'Rendering data source row',data:{sourceId:source.id,isActive:source.is_active,sourceStatusesDefined:typeof sourceStatuses!=='undefined',sourceStatusesType:typeof sourceStatuses,hasSourceStatus:sourceStatuses&&sourceStatuses[source.id]?true:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
-                  } catch(e) {}
-                  // #endregion
-                  return (
+                {dataSources.map((source) => (
                   <tr key={source.id} className="hover:bg-slate-800/30 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-200">{source.name}</td>
                     <td className="px-6 py-4 text-slate-300">
@@ -462,23 +465,15 @@ const DataSourceManager: React.FC = () => {
                             </>
                           )}
                         </button>
-                        {(() => {
-                          // #region agent log
-                          try {
-                            const hasStatus = source.is_active && sourceStatuses && typeof sourceStatuses === 'object' && sourceStatuses[source.id];
-                            fetch('http://127.0.0.1:7242/ingest/dc4e0f5f-b6dc-4e04-b23f-4972df130301',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DataSourceManager.tsx:462',message:'Checking sourceStatuses for rendering',data:{sourceId:source.id,isActive:source.is_active,sourceStatusesDefined:typeof sourceStatuses!=='undefined',sourceStatusesType:typeof sourceStatuses,hasStatus:hasStatus,sourceStatusValue:hasStatus?sourceStatuses[source.id]:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
-                          } catch(e) {}
-                          // #endregion
-                          return source.is_active && sourceStatuses && typeof sourceStatuses === 'object' && sourceStatuses[source.id] ? (
-                            <span className={`text-xs px-1 py-0.5 rounded ${
-                              sourceStatuses[source.id]?.is_working
-                                ? 'bg-blue-500/20 text-blue-400'
-                                : 'bg-red-500/20 text-red-400'
-                            }`}>
-                              {sourceStatuses[source.id]?.is_working ? '✓ 可用' : '✗ 不可用'}
-                            </span>
-                          ) : null;
-                        })()}
+                        {source.is_active && sourceStatuses && typeof sourceStatuses === 'object' && sourceStatuses[source.id] ? (
+                          <span className={`text-xs px-1 py-0.5 rounded ${
+                            sourceStatuses[source.id]?.is_working
+                              ? 'bg-blue-500/20 text-blue-400'
+                              : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {sourceStatuses[source.id]?.is_working ? '✓ 可用' : '✗ 不可用'}
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -533,8 +528,7 @@ const DataSourceManager: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                  );
-                })}
+                ))}
               </tbody>
             </table>
           </div>

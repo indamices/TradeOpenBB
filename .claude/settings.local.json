@@ -16,7 +16,9 @@
       "Bash(findstr:*)",
       "Bash(taskkill:*)",
       "Bash(wmic:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(npm run build:*)",
+      "Bash(grep:*)"
     ]
   }
 }
