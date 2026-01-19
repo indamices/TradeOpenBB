@@ -61,15 +61,6 @@ from ai_service_factory import generate_strategy, chat_with_ai
 from backtest_engine import run_backtest
 from services.benchmark_strategies import list_benchmark_strategies
 
-# CORS Configuration - centralized to avoid duplication
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",  # Vite default port
-    "https://tradeopenbb-frontend.onrender.com",  # Render frontend
-]
-
-ALLOWED_ORIGIN_REGEX = r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app"
-
 # Debug log file path - use environment variable or default to .cursor/debug.log in project root
 DEBUG_LOG_FILE = os.getenv(
     "DEBUG_LOG_FILE",
@@ -127,6 +118,32 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="SmartQuant API", version="1.0.0", lifespan=lifespan)
+
+# CORS middleware - MUST be added LAST to execute FIRST
+# This ensures CORS headers are present on ALL responses
+# In FastAPI, middleware executes in reverse order (last added = first executed)
+from fastapi.middleware.cors import CORSMiddleware
+
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://tradeopenbb-frontend.onrender.com",
+]
+
+ALLOWED_ORIGIN_REGEX = r"https://.*\.render\.com|https://.*\.railway\.app|https://.*\.fly\.dev|https://.*\.vercel\.app"
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+    expose_headers=["*"],
+    max_age=3600,
+)
+
+logger.info("CORS middleware enabled with allowed origins:", ALLOWED_ORIGINS)
 
 # Add rate limiting middleware (300 requests per minute per IP for local development)
 # In production, this should be lower (e.g., 60)
@@ -224,27 +241,6 @@ async def general_exception_handler(request: Request, exc: Exception):
 # CORS middleware - MUST be added BEFORE RateLimitMiddleware
 # In FastAPI, middleware executes in reverse order (last added = first executed)
 # So we add CORS last so it wraps all responses, but it will execute first
-# Allow local development and cloud platform domains
-# Use allow_origin_regex for pattern matching to support wildcard domains
-import re
-
-# CORS middleware configuration
-# Use CORSMiddleware as the primary CORS handler
-# Note: In FastAPI, middleware executes in reverse order (last added = first executed)
-# So CORSMiddleware should be added last to execute first and handle CORS properly
-# CORS middleware - configure to allow frontend origin
-# Note: In production, we need to allow the specific frontend domain
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],  # Explicitly list all methods
-    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With", "X-CSRFToken"],  # Explicit headers
-    expose_headers=["*"],
-    max_age=3600,  # Cache preflight for 1 hour
-)
-
 # Additional CORS ensuring middleware - ensures CORS headers on all responses including errors
 # This runs AFTER CORSMiddleware to add headers to error responses that CORSMiddleware might miss
 @app.middleware("http")
