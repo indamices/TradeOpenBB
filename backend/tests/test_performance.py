@@ -4,6 +4,14 @@ Performance tests using pytest-benchmark
 import pytest
 import time
 
+# Check if pytest-benchmark is available
+try:
+    import pytest_benchmark
+    BENCHMARK_AVAILABLE = True
+except ImportError:
+    BENCHMARK_AVAILABLE = False
+
+@pytest.mark.skipif(not BENCHMARK_AVAILABLE, reason="pytest-benchmark not installed")
 def test_portfolio_creation_performance(client, benchmark):
     """Test portfolio creation performance"""
     data = {"name": "Perf Test", "initial_cash": 1000.0}

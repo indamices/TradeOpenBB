@@ -528,7 +528,8 @@ async def run_backtest(request: BacktestRequest, db: Session, strategy: Optional
                     continue
                 
                 # Get data up to current date for strategy
-                historical_data = df.loc[:date]
+                # Use .copy() to avoid SettingWithCopyWarning when strategy modifies df
+                historical_data = df.loc[:date].copy()
                 
                 try:
                     # Execute strategy code (sandboxed)

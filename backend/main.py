@@ -11,6 +11,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
+from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from typing import List, Optional, Dict
@@ -48,7 +49,54 @@ logger = logging.getLogger(__name__)
 # Note: Conversation storage is now in database, but keeping this for backward compatibility during migration
 conversation_storage: Dict[str, List[Dict]] = {}
 
-app = FastAPI(title="SmartQuant API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events"""
+    # Startup
+    try:
+        from database import init_db
+        init_db()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}", exc_info=True)
+        raise
+
+    # Start task scheduler for background data sync
+    try:
+        from services.scheduler import scheduler
+        scheduler.start()
+        logger.info("Task scheduler started successfully")
+    except Exception as e:
+        logger.warning(f"Failed to start task scheduler: {e}. Scheduled tasks will be disabled.")
+
+    yield
+
+    # Shutdown
+    try:
+        from services.scheduler import scheduler
+        scheduler.stop()
+        logger.info("Task scheduler stopped")
+    except Exception:
+        pass
+    try:
+        # Cleanup on shutdown
+        logger.info("Application shutting down")
+
+        # Verify default portfolio exists
+        db = next(get_db())
+        try:
+            portfolio = db.query(Portfolio).filter(Portfolio.id == 1).first()
+            if portfolio:
+                logger.info(f"Verified default portfolio exists: {portfolio.name} (ID: {portfolio.id})")
+            else:
+                logger.warning("Default portfolio (ID=1) not found after initialization")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Database initialization failed: {str(e)}", exc_info=True)
+
+
+app = FastAPI(title="SmartQuant API", version="1.0.0", lifespan=lifespan)
 
 # Add rate limiting middleware (300 requests per minute per IP for local development)
 # In production, this should be lower (e.g., 60)
@@ -195,55 +243,8 @@ async def cors_ensuring_middleware(request: Request, call_next):
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With, X-CSRFToken"
-    
+
     return response
-
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
-    # Initialize database first
-    try:
-        from database import init_db
-        init_db()
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}", exc_info=True)
-        raise
-    
-    # Start task scheduler for background data sync
-    try:
-        from services.scheduler import scheduler
-        scheduler.start()
-        logger.info("Task scheduler started successfully")
-    except Exception as e:
-        logger.warning(f"Failed to start task scheduler: {e}. Scheduled tasks will be disabled.")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Shutdown event handler"""
-    try:
-        from services.scheduler import scheduler
-        scheduler.stop()
-        logger.info("Task scheduler stopped")
-    except Exception:
-        pass
-    try:
-        # Cleanup on shutdown
-        logger.info("Application shutting down")
-        
-        # Verify default portfolio exists
-        db = next(get_db())
-        try:
-            portfolio = db.query(Portfolio).filter(Portfolio.id == 1).first()
-            if portfolio:
-                logger.info(f"Verified default portfolio exists: {portfolio.name} (ID: {portfolio.id})")
-            else:
-                logger.warning("Default portfolio (ID=1) not found after initialization")
-        finally:
-            db.close()
-    except Exception as e:
-        logger.error(f"Database initialization failed: {str(e)}", exc_info=True)
-        # Don't raise - allow app to start even if DB init fails
 
 # Health check
 @app.get("/")
@@ -2297,7 +2298,8 @@ async def update_backtest_record(
     db: Session = Depends(get_db)
 ):
     """更新回测记录（主要是更新名称）"""
-    record = db.query(BacktestRecord).filter(BacktestRecord.id == record_id).first()
+    from models import BacktestRecord as BacktestRecordModel
+    record = db.query(BacktestRecordModel).filter(BacktestRecordModel.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Backtest record not found")
     
@@ -2311,7 +2313,8 @@ async def update_backtest_record(
 @app.delete("/api/backtest/records/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_backtest_record(record_id: int, db: Session = Depends(get_db)):
     """删除回测记录"""
-    record = db.query(BacktestRecord).filter(BacktestRecord.id == record_id).first()
+    from models import BacktestRecord as BacktestRecordModel
+    record = db.query(BacktestRecordModel).filter(BacktestRecordModel.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Backtest record not found")
     
@@ -2323,7 +2326,8 @@ async def delete_backtest_record(record_id: int, db: Session = Depends(get_db)):
 async def export_backtest_record_csv(record_id: int, db: Session = Depends(get_db)):
     """导出回测记录为CSV格式"""
     try:
-        record = db.query(BacktestRecord).filter(BacktestRecord.id == record_id).first()
+        from models import BacktestRecord as BacktestRecordModel
+        record = db.query(BacktestRecordModel).filter(BacktestRecordModel.id == record_id).first()
         if not record:
             raise HTTPException(status_code=404, detail="Backtest record not found")
         
@@ -2345,7 +2349,8 @@ async def export_backtest_record_csv(record_id: int, db: Session = Depends(get_d
         writer.writerow(['开始日期', record.start_date])
         writer.writerow(['结束日期', record.end_date])
         writer.writerow(['初始资金', record.initial_cash])
-        writer.writerow(['股票列表', ', '.join(record.symbols)])
+        symbols_list = record.symbols if isinstance(record.symbols, list) else []
+        writer.writerow(['股票列表', ', '.join(symbols_list) if symbols_list else 'N/A'])
         writer.writerow(['创建时间', record.created_at])
         writer.writerow([])
         
@@ -2353,11 +2358,11 @@ async def export_backtest_record_csv(record_id: int, db: Session = Depends(get_d
         writer.writerow(['回测指标'])
         writer.writerow(['夏普比率', record.sharpe_ratio or 'N/A'])
         writer.writerow(['索提诺比率', record.sortino_ratio or 'N/A'])
-        writer.writerow(['年化收益率', f"{record.annualized_return:.2f}%" if record.annualized_return else 'N/A'])
-        writer.writerow(['最大回撤', f"{record.max_drawdown:.2f}%" if record.max_drawdown else 'N/A'])
-        writer.writerow(['胜率', f"{record.win_rate:.2f}%" if record.win_rate else 'N/A'])
+        writer.writerow(['年化收益率', f"{(record.annualized_return * 100):.2f}%" if record.annualized_return else 'N/A'])
+        writer.writerow(['最大回撤', f"{(record.max_drawdown * 100):.2f}%" if record.max_drawdown else 'N/A'])
+        writer.writerow(['胜率', f"{(record.win_rate * 100):.2f}%" if record.win_rate else 'N/A'])
         writer.writerow(['总交易次数', record.total_trades or 0])
-        writer.writerow(['总收益率', f"{record.total_return:.2f}%" if record.total_return else 'N/A'])
+        writer.writerow(['总收益率', f"{(record.total_return * 100):.2f}%" if record.total_return else 'N/A'])
         writer.writerow([])
         
         # 如果有完整结果，导出详细数据
@@ -2430,7 +2435,13 @@ async def export_backtest_record_csv(record_id: int, db: Session = Depends(get_d
 async def export_backtest_record_excel(record_id: int, db: Session = Depends(get_db)):
     """导出回测记录为Excel格式"""
     try:
-        # 检查是否安装了openpyxl
+        # First check if record exists
+        from models import BacktestRecord as BacktestRecordModel
+        record = db.query(BacktestRecordModel).filter(BacktestRecordModel.id == record_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="Backtest record not found")
+        
+        # Then check if openpyxl is installed
         try:
             import openpyxl
             from openpyxl.styles import Font, PatternFill, Alignment
@@ -2440,10 +2451,6 @@ async def export_backtest_record_excel(record_id: int, db: Session = Depends(get
                 status_code=500, 
                 detail="Excel export requires openpyxl. Install with: pip install openpyxl"
             )
-        
-        record = db.query(BacktestRecord).filter(BacktestRecord.id == record_id).first()
-        if not record:
-            raise HTTPException(status_code=404, detail="Backtest record not found")
         
         import io
         
@@ -2472,7 +2479,7 @@ async def export_backtest_record_excel(record_id: int, db: Session = Depends(get
             ['开始日期', str(record.start_date)],
             ['结束日期', str(record.end_date)],
             ['初始资金', record.initial_cash],
-            ['股票列表', ', '.join(record.symbols)],
+            ['股票列表', ', '.join(record.symbols) if isinstance(record.symbols, list) and record.symbols else 'N/A'],
             ['创建时间', str(record.created_at)]
         ]
         for key, value in info_data:
@@ -2493,11 +2500,11 @@ async def export_backtest_record_excel(record_id: int, db: Session = Depends(get
         metrics_data = [
             ['夏普比率', record.sharpe_ratio],
             ['索提诺比率', record.sortino_ratio],
-            ['年化收益率', f"{record.annualized_return:.2f}%" if record.annualized_return else 'N/A'],
-            ['最大回撤', f"{record.max_drawdown:.2f}%" if record.max_drawdown else 'N/A'],
-            ['胜率', f"{record.win_rate:.2f}%" if record.win_rate else 'N/A'],
+            ['年化收益率', f"{(record.annualized_return * 100):.2f}%" if record.annualized_return else 'N/A'],
+            ['最大回撤', f"{(record.max_drawdown * 100):.2f}%" if record.max_drawdown else 'N/A'],
+            ['胜率', f"{(record.win_rate * 100):.2f}%" if record.win_rate else 'N/A'],
             ['总交易次数', record.total_trades or 0],
-            ['总收益率', f"{record.total_return:.2f}%" if record.total_return else 'N/A']
+            ['总收益率', f"{(record.total_return * 100):.2f}%" if record.total_return else 'N/A']
         ]
         for key, value in metrics_data:
             ws_info.cell(row=row, column=1, value=key).font = Font(bold=True)
@@ -2509,7 +2516,7 @@ async def export_backtest_record_excel(record_id: int, db: Session = Depends(get
         ws_info.column_dimensions['B'].width = 30
         
         # 如果有完整结果，创建详细工作表
-        if record.full_result:
+        if record.full_result and isinstance(record.full_result, dict):
             # 交易记录工作表
             if 'trades' in record.full_result and record.full_result['trades']:
                 ws_trades = wb.create_sheet("交易记录")

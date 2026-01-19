@@ -313,6 +313,11 @@ class FutuService:
             return self.quote_ctx is not None
         except Exception:
             return False
+    
+    @staticmethod
+    def is_available_static() -> bool:
+        """Static method to check if Futu library is available"""
+        return FUTU_AVAILABLE
 
 
 # Create singleton instance (lazy initialization)

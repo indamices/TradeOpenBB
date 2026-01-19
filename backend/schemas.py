@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
+from pydantic.config import ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from enum import Enum
@@ -27,9 +28,10 @@ class AIProvider(str, Enum):
 class PortfolioBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     initial_cash: float = Field(..., gt=0, le=1e15)
-    
-    @validator('name')
-    def validate_name(cls, v):
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError('Name cannot be empty')
         return v.strip()
@@ -45,15 +47,14 @@ class PortfolioUpdate(BaseModel):
     daily_pnl_percent: Optional[float] = None
 
 class Portfolio(PortfolioBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     current_cash: float
     total_value: float
     daily_pnl: float
     daily_pnl_percent: float
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 # Position Schemas
 class PositionBase(BaseModel):
@@ -61,9 +62,10 @@ class PositionBase(BaseModel):
     quantity: int = Field(..., gt=0, le=999999999)
     avg_price: float = Field(..., gt=0)
     current_price: float = Field(..., gt=0)
-    
-    @validator('symbol')
-    def validate_symbol(cls, v):
+
+    @field_validator('symbol')
+    @classmethod
+    def validate_symbol(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError('Symbol cannot be empty')
         return v.strip().upper()
@@ -80,15 +82,14 @@ class PositionUpdate(BaseModel):
     unrealized_pnl_percent: Optional[float] = None
 
 class Position(PositionBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     portfolio_id: int
     market_value: float
     unrealized_pnl: float
     unrealized_pnl_percent: float
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 # Order Schemas
 class OrderBase(BaseModel):
@@ -97,9 +98,10 @@ class OrderBase(BaseModel):
     type: OrderType
     quantity: int = Field(..., gt=0, le=999999999)
     limit_price: Optional[float] = Field(None, gt=0)
-    
-    @validator('symbol')
-    def validate_symbol(cls, v):
+
+    @field_validator('symbol')
+    @classmethod
+    def validate_symbol(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError('Symbol cannot be empty')
         return v.strip().upper()
@@ -113,6 +115,8 @@ class OrderUpdate(BaseModel):
     filled_at: Optional[datetime] = None
 
 class Order(OrderBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     portfolio_id: int
     status: OrderStatus
@@ -120,9 +124,6 @@ class Order(OrderBase):
     commission: float
     created_at: datetime
     filled_at: Optional[datetime]
-    
-    class Config:
-        from_attributes = True
 
 # Strategy Schemas
 class StrategyBase(BaseModel):
@@ -141,13 +142,12 @@ class StrategyUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 class Strategy(StrategyBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     is_active: bool
     target_portfolio_id: int
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 # Market Quote Schema
 class MarketQuote(BaseModel):
@@ -177,14 +177,13 @@ class AIModelConfigUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 class AIModelConfigResponse(AIModelConfigBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     is_default: bool
     is_active: bool
     created_at: datetime
     # Note: api_key is not included in response for security
-    
-    class Config:
-        from_attributes = True
 
 # Strategy Generation Schemas
 class StrategyGenerationRequest(BaseModel):
@@ -216,10 +215,11 @@ class ChatResponse(BaseModel):
 class StockPoolBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
-    symbols: List[str] = Field(..., min_items=1)
-    
-    @validator('symbols')
-    def validate_symbols(cls, v):
+    symbols: List[str] = Field(..., min_length=1)
+
+    @field_validator('symbols')
+    @classmethod
+    def validate_symbols(cls, v: List[str]) -> List[str]:
         if not v:
             raise ValueError('Symbols list cannot be empty')
         # Normalize symbols to uppercase
@@ -232,9 +232,10 @@ class StockPoolUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     symbols: Optional[List[str]] = None
-    
-    @validator('symbols')
-    def validate_symbols(cls, v):
+
+    @field_validator('symbols')
+    @classmethod
+    def validate_symbols(cls, v: Optional[List[str]]) -> Optional[List[str]]:
         if v is not None:
             if not v:
                 raise ValueError('Symbols list cannot be empty')
@@ -242,15 +243,16 @@ class StockPoolUpdate(BaseModel):
         return v
 
 class StockPool(StockPoolBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 # Stock Info Schemas
 class StockInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     symbol: str
     name: Optional[str] = None
     exchange: Optional[str] = None
@@ -260,13 +262,10 @@ class StockInfo(BaseModel):
     market_cap: Optional[int] = None
     pe_ratio: Optional[float] = None
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 # Data Sync Schemas
 class DataSyncRequest(BaseModel):
-    symbols: List[str] = Field(..., min_items=1)
+    symbols: List[str] = Field(..., min_length=1)
     start_date: str  # ISO format date
     end_date: str  # ISO format date
     sync_type: str = "historical"  # 'historical', 'realtime', 'info'
@@ -282,25 +281,23 @@ class ConversationBase(BaseModel):
     title: Optional[str] = None
 
 class Conversation(ConversationBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     conversation_id: str
     created_at: datetime
     updated_at: Optional[datetime] = None
     message_count: int = 0  # 消息数量
-    
-    class Config:
-        from_attributes = True
 
 class ConversationMessage(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     conversation_id: str
     role: str  # 'user' or 'assistant'
     content: str
     code_snippets: Optional[Dict[str, str]] = None
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 # ChatStrategy Schemas
 class ChatStrategyBase(BaseModel):
@@ -313,15 +310,14 @@ class ChatStrategyCreate(ChatStrategyBase):
     message_id: Optional[int] = None
 
 class ChatStrategy(ChatStrategyBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     conversation_id: str
     message_id: Optional[int] = None
     is_saved: bool
     saved_strategy_id: Optional[int] = None
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 class SaveStrategyRequest(BaseModel):
     name: str
@@ -371,22 +367,19 @@ class DataSourceConfigUpdate(BaseModel):
     rate_limit: Optional[int] = None
 
 class DataSourceConfigResponse(DataSourceConfigBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
-    is_active: Optional[bool] = None
 
 class SymbolList(SymbolListBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 # Strategy Active Status Schemas
 class SetStrategyActiveRequest(BaseModel):
@@ -402,7 +395,7 @@ class BacktestRequest(BaseModel):
     start_date: str  # ISO format date
     end_date: str
     initial_cash: float = Field(gt=0)
-    symbols: List[str] = Field(min_items=1)
+    symbols: List[str] = Field(min_length=1)
     compare_with_indices: bool = False  # Whether to compare with market indices
     compare_items: Optional[List[str]] = None  # List of items to compare: ['NASDAQ', 'SMA_CROSS', 'MOMENTUM', etc.]
 
@@ -441,6 +434,8 @@ class BacktestRecordUpdate(BaseModel):
     name: Optional[str] = None
 
 class BacktestRecord(BacktestRecordBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     strategy_name: Optional[str] = None
     sharpe_ratio: Optional[float] = None
@@ -455,9 +450,6 @@ class BacktestRecord(BacktestRecordBase):
     compare_items: Optional[List[str]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 
 # Parameter Optimization Schemas
@@ -466,7 +458,7 @@ class ParameterOptimizationRequest(BaseModel):
     start_date: str  # ISO format date
     end_date: str
     initial_cash: float = Field(gt=0, default=100000)
-    symbols: List[str] = Field(min_items=1)
+    symbols: List[str] = Field(min_length=1)
     parameter_ranges: Dict[str, List[Any]] = Field(default_factory=dict)  # e.g., {"short_sma": [10, 20, 30], "long_sma": [50, 100, 200]}
     optimization_metric: str = Field(default="sharpe_ratio")  # sharpe_ratio, sortino_ratio, annualized_return, total_return, win_rate, max_drawdown
 

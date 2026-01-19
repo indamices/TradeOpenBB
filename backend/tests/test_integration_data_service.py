@@ -33,7 +33,7 @@ def db_session():
 @pytest.mark.asyncio
 async def test_data_service_fetch_historical_data(db_session):
     """Test fetching historical data through DataService"""
-    async with DataService(db=db_session) as data_service:
+    with DataService(db=db_session) as data_service:
         # Test with a known stock symbol
         symbol = "AAPL"
         end_date = datetime.now().strftime('%Y-%m-%d')
@@ -68,7 +68,7 @@ async def test_data_service_fetch_historical_data(db_session):
 @pytest.mark.asyncio
 async def test_data_service_caching(db_session):
     """Test that DataService caches data correctly"""
-    async with DataService(db=db_session) as data_service:
+    with DataService(db=db_session) as data_service:
         symbol = "AAPL"
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
@@ -110,7 +110,7 @@ async def test_data_service_caching(db_session):
 @pytest.mark.asyncio
 async def test_data_service_batch_fetch(db_session):
     """Test batch fetching data for multiple symbols"""
-    async with DataService(db=db_session) as data_service:
+    with DataService(db=db_session) as data_service:
         symbols = ["AAPL", "GOOGL", "MSFT"]
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
@@ -140,7 +140,7 @@ async def test_data_service_batch_fetch(db_session):
 @pytest.mark.asyncio
 async def test_data_service_fallback_mechanism(db_session):
     """Test data source fallback mechanism"""
-    async with DataService(db=db_session) as data_service:
+    with DataService(db=db_session) as data_service:
         symbol = "AAPL"
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')

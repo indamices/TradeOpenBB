@@ -12,10 +12,9 @@ def test_import_main_app():
         from main import app
         assert app is not None
         print("PASS: Main app imported successfully")
-        return True
     except Exception as e:
         print(f"FAIL: Main app import failed: {e}")
-        return False
+        raise
 
 def test_app_routes_exist():
     """Test that key routes exist in app"""
@@ -46,11 +45,11 @@ def test_app_routes_exist():
             print("PASS: All key endpoints found")
             print(f"INFO: Total routes: {len(routes)}")
         
-        return len(missing) == 0
+        assert len(missing) == 0, f"Missing endpoints: {missing}"
         
     except Exception as e:
         print(f"FAIL: Route check failed: {e}")
-        return False
+        raise
 
 def test_schema_imports():
     """Test that all required schemas can be imported"""
@@ -74,10 +73,9 @@ def test_schema_imports():
             BacktestResult
         ])
         print("PASS: All required schemas imported successfully")
-        return True
     except Exception as e:
         print(f"FAIL: Schema import failed: {e}")
-        return False
+        raise
 
 def test_model_imports():
     """Test that all required models can be imported"""
@@ -95,10 +93,9 @@ def test_model_imports():
             DataSourceConfig
         ])
         print("PASS: All required models imported successfully")
-        return True
     except Exception as e:
         print(f"FAIL: Model import failed: {e}")
-        return False
+        raise
 
 def test_service_imports():
     """Test that all required services can be imported"""
@@ -113,10 +110,9 @@ def test_service_imports():
             DataService
         ])
         print("PASS: All required services imported successfully")
-        return True
     except Exception as e:
         print(f"FAIL: Service import failed: {e}")
-        return False
+        raise
 
 if __name__ == '__main__':
     print("=" * 60)

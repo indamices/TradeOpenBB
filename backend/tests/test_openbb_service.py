@@ -154,6 +154,11 @@ class TestOpenBBService:
         """Test getting indicators for invalid symbol"""
         service = OpenBBService()
         
+        try:
+            import yfinance
+        except ImportError:
+            pytest.skip("yfinance unavailable")
+        
         with pytest.raises(ValueError):
             service.get_technical_indicators("INVALID_SYMBOL_XYZ123", ["sma"], period=20)
     
