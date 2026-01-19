@@ -44,14 +44,25 @@ class FutuService:
         """Ensure connection to OpenD is established"""
         if not FUTU_AVAILABLE:
             raise ValueError("Futu library not available. Install with: pip install futu")
-        
+
         if self.quote_ctx is None:
             try:
                 self.quote_ctx = ft.OpenQuoteContext(host=self.host, port=self.port)
                 logger.info(f"Connected to Futu OpenD at {self.host}:{self.port}")
             except Exception as e:
-                logger.error(f"Failed to connect to Futu OpenD: {str(e)}")
-                raise ValueError(f"Failed to connect to Futu OpenD: {str(e)}")
+                error_msg = str(e)
+                logger.error(f"Failed to connect to Futu OpenD: {error_msg}")
+
+                # Provide helpful error messages
+                if "11111" in error_msg or "Connection" in error_msg:
+                    raise ValueError(
+                        f"Cannot connect to Futu OpenD at {self.host}:{self.port}. "
+                        f"Please ensure Futu OpenD (OpenD) is running. "
+                        f"Download from: https://openapi.futunn.com/download "
+                        f"Start with: 'opend --time_zone Asia/Shanghai'"
+                    )
+                else:
+                    raise ValueError(f"Failed to connect to Futu OpenD: {error_msg}")
     
     def _get_market(self, symbol: str):
         """Determine market from symbol"""

@@ -1,6 +1,6 @@
 from typing import Optional, Dict
 from sqlalchemy.orm import Session
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 import os
 import base64
 import logging
@@ -20,33 +20,47 @@ logger = logging.getLogger(__name__)
 
 # Encryption key for API keys (in production, use environment variable)
 def get_encryption_key() -> bytes:
-    """Get encryption key from environment or generate one"""
+    """
+    Get encryption key from environment or generate one.
+
+    The key must be 32 bytes for Fernet encryption.
+    Environment variable can be:
+    1. A base64-encoded Fernet key (44 chars) - RECOMMENDED
+    2. A 32-byte string (will be used directly)
+    3. Any string (will be padded/truncated to 32 bytes)
+
+    To generate a proper key:
+        python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    """
     key = os.getenv("ENCRYPTION_KEY")
     if key:
         try:
-            # Try to decode if it's base64 encoded
-            decoded = base64.urlsafe_b64decode(key)
-            if len(decoded) == 32:
-                return decoded
-        except Exception:
-            pass
-        
-        # If decoding fails or key is not base64, try to use it directly
-        # If it's a string, encode it and pad/truncate to 32 bytes
-        if isinstance(key, str):
+            # Try to decode as base64 (Fernet keys are 44 chars when base64 encoded)
+            if len(key) == 44:
+                decoded = base64.urlsafe_b64decode(key)
+                if len(decoded) == 32:
+                    return decoded
+                else:
+                    logger.warning(f"Invalid Fernet key length: {len(decoded)} bytes (expected 32)")
+            # Try to use as raw bytes
             key_bytes = key.encode('utf-8')
+            if len(key_bytes) == 32:
+                return key_bytes
             # Pad or truncate to 32 bytes
             if len(key_bytes) < 32:
-                key_bytes = key_bytes.ljust(32, b'0')
-            elif len(key_bytes) > 32:
-                key_bytes = key_bytes[:32]
-            return key_bytes
-        elif len(key) == 32:
-            return key
-    
-    # Generate a key if not provided
-    logger.warning("Using default encryption key. Set ENCRYPTION_KEY in production!")
-    return Fernet.generate_key()
+                logger.warning(f"Encryption key too short ({len(key_bytes)} bytes), padding to 32 bytes")
+                return key_bytes.ljust(32, b'0')
+            else:
+                logger.warning(f"Encryption key too long ({len(key_bytes)} bytes), truncating to 32 bytes")
+                return key_bytes[:32]
+        except Exception as e:
+            logger.error(f"Error processing ENCRYPTION_KEY: {e}")
+
+    # Generate a key if not provided or invalid
+    logger.warning("Using auto-generated encryption key. Set ENCRYPTION_KEY in production for data persistence!")
+    generated_key = Fernet.generate_key()
+    logger.info(f"Generated encryption key (base64): {generated_key.decode()}")
+    return generated_key
 
 # Initialize Fernet cipher (lazy initialization to handle errors)
 _cipher = None
@@ -57,21 +71,8 @@ def get_cipher():
     if _cipher is None:
         try:
             key = get_encryption_key()
-            # Ensure key is 32 bytes (Fernet requirement)
-            if len(key) != 32:
-                # If key is base64 encoded (44 chars), decode it
-                if len(key) == 44:
-                    try:
-                        key = base64.urlsafe_b64decode(key)
-                    except Exception:
-                        pass
-                # If still not 32 bytes, pad or truncate
-                if len(key) != 32:
-                    if len(key) < 32:
-                        key = key.ljust(32, b'0')
-                    else:
-                        key = key[:32]
             _cipher = Fernet(key)
+            logger.info("Fernet cipher initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize cipher: {str(e)}")
             # Generate a new key as fallback
@@ -82,8 +83,8 @@ def encrypt_api_key(api_key: str) -> str:
     """Encrypt API key for storage"""
     try:
         cipher = get_cipher()
-        encrypted = cipher.encrypt(api_key.encode())
-        return base64.urlsafe_b64encode(encrypted).decode()
+        encrypted = cipher.encrypt(api_key.encode('utf-8'))
+        return base64.urlsafe_b64encode(encrypted).decode('utf-8')
     except Exception as e:
         logger.error(f"Encryption failed: {str(e)}")
         return api_key  # Fallback to plain text (not recommended)
@@ -92,9 +93,16 @@ def decrypt_api_key(encrypted_key: str) -> str:
     """Decrypt API key from storage"""
     try:
         cipher = get_cipher()
-        decoded = base64.urlsafe_b64decode(encrypted_key.encode())
+        decoded = base64.urlsafe_b64decode(encrypted_key.encode('utf-8'))
         decrypted = cipher.decrypt(decoded)
-        return decrypted.decode()
+        return decrypted.decode('utf-8')
+    except InvalidToken as e:
+        logger.error(f"Invalid token during decryption: {str(e)}")
+        # The key might have been encrypted with a different key
+        # Try returning as-is if it looks like a plain API key
+        if encrypted_key.startswith(('sk-', 'gsk_', 'gemini-')):
+            return encrypted_key
+        raise
     except Exception as e:
         logger.error(f"Decryption failed: {str(e)}")
         return encrypted_key  # Return as-is if decryption fails
