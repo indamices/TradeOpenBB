@@ -2,6 +2,7 @@ import React, { useState, lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';  // 保留默认路由立即加载
+import ErrorBoundary from './components/ErrorBoundary';  // 错误边界
 
 // 懒加载非关键路由（按需加载，减少初始 bundle 大小）
 // 优化：主 bundle 大小将从 670KB 减少到约 350KB（48% 减少）
@@ -109,9 +110,11 @@ const App: React.FC = () => {
   };
 
   return (
-    <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
-      {renderContent()}
-    </Layout>
+    <ErrorBoundary>
+      <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
+        {renderContent()}
+      </Layout>
+    </ErrorBoundary>
   );
 };
 
