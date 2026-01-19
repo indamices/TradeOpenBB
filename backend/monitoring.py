@@ -17,6 +17,9 @@ from datetime import datetime
 from fastapi import Request
 import json
 
+# Module-level logger for monitoring functions
+logger = logging.getLogger(__name__)
+
 # 配置结构化日志
 def setup_logging():
     """
