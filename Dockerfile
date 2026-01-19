@@ -8,14 +8,17 @@ WORKDIR /app
 # 复制包文件
 COPY package*.json ./
 
-# 安装依赖
-RUN npm ci --only=production
+# 安装所有依赖（包括 devDependencies，构建需要）
+RUN npm ci
 
 # 复制源代码
 COPY . .
 
 # 构建应用
 RUN npm run build
+
+# 清理：删除 node_modules 和源代码（减小构建上下文）
+RUN rm -rf node_modules src
 
 # ==========================================
 # 阶段 2: 运行时 (nginx)
