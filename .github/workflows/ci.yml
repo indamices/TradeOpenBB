@@ -67,19 +67,19 @@ jobs:
     - name: Initialize test database
       working-directory: ./backend
       run: |
-        python -c "
-import sys
-import logging
-logging.basicConfig(level=logging.INFO)
-
-try:
-    from database import init_db
-    init_db()
-    print('Database initialized successfully')
-except Exception as e:
-    print(f'Database initialization error: {e}', file=sys.stderr)
-    # Don't fail - tests will handle missing tables
-"
+        python << 'EOF'
+        import sys
+        import logging
+        logging.basicConfig(level=logging.INFO)
+        
+        try:
+            from database import init_db
+            init_db()
+            print('Database initialized successfully')
+        except Exception as e:
+            print(f'Database initialization error: {e}', file=sys.stderr)
+            # Don't fail - tests will handle missing tables
+        EOF
 
     - name: Run tests with pytest
       working-directory: ./backend
