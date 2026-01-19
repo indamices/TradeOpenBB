@@ -58,6 +58,12 @@ class TestPerformanceBenchmarks:
     @pytest.fixture
     async def client(self):
         """创建测试客户端"""
+        from database import engine, SessionLocal
+        from models import Base
+
+        # Create all tables
+        Base.metadata.create_all(bind=engine)
+
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             yield ac
