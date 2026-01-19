@@ -244,16 +244,41 @@ class FutuService:
         
         try:
             market = self._get_market(symbol)
-            
-            # Map period to Futu's period type
-            period_map = {
-                'day': ft.CapitalFlowPeriod.DAY,
-                'week': ft.CapitalFlowPeriod.WEEK,
-                'month': ft.CapitalFlowPeriod.MONTH,
-                'year': ft.CapitalFlowPeriod.YEAR
-            }
-            
-            futu_period = period_map.get(period, ft.CapitalFlowPeriod.DAY)
+
+            # Map period to Futu's period type (handle different API versions)
+            period_map = {}
+
+            # Check if CapitalFlowPeriod exists and has required attributes
+            if hasattr(ft, 'CapitalFlowPeriod'):
+                if hasattr(ft.CapitalFlowPeriod, 'DAY'):
+                    period_map['day'] = ft.CapitalFlowPeriod.DAY
+                if hasattr(ft.CapitalFlowPeriod, 'WEEK'):
+                    period_map['week'] = ft.CapitalFlowPeriod.WEEK
+                if hasattr(ft.CapitalFlowPeriod, 'MONTH'):
+                    period_map['month'] = ft.CapitalFlowPeriod.MONTH
+                if hasattr(ft.CapitalFlowPeriod, 'YEAR'):
+                    period_map['year'] = ft.CapitalFlowPeriod.YEAR
+
+            # Fallback: try QueryType if CapitalFlowPeriod not available or incomplete
+            if len(period_map) < 4 and hasattr(ft, 'QueryType'):
+                period_map['day'] = ft.QueryType.DAY
+                if hasattr(ft.QueryType, 'WEEK'):
+                    period_map['week'] = ft.QueryType.WEEK
+                else:
+                    period_map['week'] = ft.QueryType.DAY
+                if hasattr(ft.QueryType, 'MONTH'):
+                    period_map['month'] = ft.QueryType.MONTH
+                else:
+                    period_map['month'] = ft.QueryType.DAY
+                if hasattr(ft.QueryType, 'YEAR'):
+                    period_map['year'] = ft.QueryType.YEAR
+                else:
+                    period_map['year'] = ft.QueryType.DAY
+
+            if not period_map:
+                raise ValueError("Cannot determine Futu period types")
+
+            futu_period = period_map.get(period, period_map.get('day'))
             
             # Get capital flow
             ret, data = self.quote_ctx.get_capital_flow(symbol, futu_period)

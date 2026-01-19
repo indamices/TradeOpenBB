@@ -23,11 +23,19 @@ except ImportError:
 @pytest.fixture
 def db_session():
     """Create database session"""
+    from models import Base
+    from database import engine
+
+    # 创建所有表
+    Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+        # 清理：删除所有表
+        Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
