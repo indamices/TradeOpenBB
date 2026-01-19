@@ -27,24 +27,16 @@ export default defineConfig(({ mode }) => {
           output: {
             /**
              * 优化代码分割策略
-             * 减少初始 bundle 大小，提升加载速度
+             * 简化chunk避免循环依赖
              */
             manualChunks: (id) => {
               // Vendor 分离（第三方库）
               if (id.includes('node_modules')) {
-                // React 核心
-                if (id.includes('react') || id.includes('react-dom')) {
-                  return 'react-vendor';
-                }
                 // 图表库（recharts 单独一个 chunk，因为它很大）
                 if (id.includes('recharts')) {
                   return 'chart-vendor';
                 }
-                // UI 库（lucide-react 图标等）
-                if (id.includes('lucide-react')) {
-                  return 'ui-vendor';
-                }
-                // 其他第三方库
+                // 其他所有第三方库（包括React）合并为一个vendor，避免循环依赖
                 return 'vendor';
               }
 
