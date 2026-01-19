@@ -149,7 +149,7 @@ const Dashboard: React.FC = () => {
           <div className="mt-4 flex items-center text-sm">
             <span className={`flex items-center ${portfolio.daily_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {portfolio.daily_pnl >= 0 ? <ArrowUpRight size={14} className="mr-1" /> : <ArrowDownRight size={14} className="mr-1" />}
-              {portfolio.daily_pnl_percent >= 0 ? '+' : ''}{portfolio.daily_pnl_percent.toFixed(2)}%
+              {portfolio.daily_pnl_percent >= 0 ? '+' : ''}{(portfolio.daily_pnl_percent ?? 0).toFixed(2)}%
             </span>
             <span className="text-slate-600 ml-2">今日</span>
           </div>
@@ -181,7 +181,7 @@ const Dashboard: React.FC = () => {
               {portfolio.daily_pnl >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
             </div>
           </div>
-          <p className="text-slate-600 text-sm mt-4">{portfolio.daily_pnl_percent.toFixed(2)}%</p>
+          <p className="text-slate-600 text-sm mt-4">{(portfolio.daily_pnl_percent ?? 0).toFixed(2)}%</p>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">

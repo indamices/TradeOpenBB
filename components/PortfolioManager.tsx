@@ -169,7 +169,7 @@ const PortfolioManager: React.FC = () => {
           <div className="mt-4 flex items-center text-sm">
             <span className={`flex items-center ${portfolio.daily_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {portfolio.daily_pnl >= 0 ? <TrendingUp size={14} className="mr-1" /> : <TrendingDown size={14} className="mr-1" />}
-              {portfolio.daily_pnl_percent >= 0 ? '+' : ''}{portfolio.daily_pnl_percent.toFixed(2)}%
+              {portfolio.daily_pnl_percent >= 0 ? '+' : ''}{(portfolio.daily_pnl_percent ?? 0).toFixed(2)}%
             </span>
             <span className="text-slate-600 ml-2">今日</span>
           </div>
