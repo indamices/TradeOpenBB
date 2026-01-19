@@ -2483,6 +2483,14 @@ async def get_data_sources_status(db: Session = Depends(get_db)):
             DataSourceConfig.is_active == True
         ).order_by(DataSourceConfig.priority.desc(), DataSourceConfig.is_default.desc()).all()
         
+        # If no active sources, return empty status
+        if not active_sources:
+            return {
+                "sources": [],
+                "working_source_id": None,
+                "message": "没有激活的数据源。请在数据源管理页面添加并激活数据源。"
+            }
+        
         # Test each source with a quick fetch
         test_symbol = "AAPL"
         test_end_date = datetime.now().strftime('%Y-%m-%d')
@@ -2494,8 +2502,14 @@ async def get_data_sources_status(db: Session = Depends(get_db)):
         for source in active_sources:
             try:
                 from services.data_service import DataService
-                async with DataService(db=db) as data_service:
+                import pandas as pd
+                
+                # DataService is a sync context manager, but we can use it in async context
+                data_service = DataService(db=db, source_id=source.id)
+                try:
                     data_service.test_source_id = source.id
+                    logger.info(f"Testing data source: {source.name} (ID: {source.id}, provider: {source.provider})")
+                    
                     data = await data_service.get_historical_data(
                         test_symbol,
                         test_start_date,
@@ -2503,7 +2517,29 @@ async def get_data_sources_status(db: Session = Depends(get_db)):
                         use_cache=False
                     )
                     
-                    is_working = data is not None and not data.empty
+                    # Check if data is valid (not None and not empty DataFrame)
+                    is_working = False
+                    data_points = 0
+                    if data is not None:
+                        try:
+                            if isinstance(data, pd.DataFrame):
+                                is_working = not data.empty
+                                data_points = len(data) if is_working else 0
+                                if is_working:
+                                    logger.info(f"Data source {source.name} is working: {data_points} data points")
+                                else:
+                                    logger.warning(f"Data source {source.name} returned empty DataFrame")
+                            else:
+                                # If it's not a DataFrame, try to get length
+                                is_working = len(data) > 0 if hasattr(data, '__len__') else False
+                                data_points = len(data) if is_working else 0
+                        except Exception as check_error:
+                            logger.warning(f"Error checking data validity for source {source.name}: {check_error}")
+                            is_working = False
+                            data_points = 0
+                    else:
+                        logger.warning(f"Data source {source.name} returned None")
+                    
                     if is_working and working_source_id is None:
                         working_source_id = source.id
                     
@@ -2514,12 +2550,14 @@ async def get_data_sources_status(db: Session = Depends(get_db)):
                         "is_working": is_working,
                         "priority": source.priority,
                         "is_default": source.is_default,
-                        "data_points": len(data) if is_working else 0,
+                        "data_points": data_points,
                         "error": None
                     })
+                finally:
+                    data_service.close()
             except Exception as e:
                 error_msg = str(e)
-                logger.warning(f"Failed to test source {source.name}: {error_msg}")
+                logger.warning(f"Failed to test source {source.name} (ID: {source.id}, provider: {source.provider}): {error_msg}", exc_info=True)
                 status_list.append({
                     "source_id": source.id,
                     "name": source.name,
@@ -2528,7 +2566,7 @@ async def get_data_sources_status(db: Session = Depends(get_db)):
                     "priority": source.priority,
                     "is_default": source.is_default,
                     "data_points": 0,
-                    "error": error_msg
+                    "error": error_msg[:200] if len(error_msg) > 200 else error_msg  # Truncate long error messages
                 })
         
         return {

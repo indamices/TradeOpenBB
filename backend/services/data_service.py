@@ -238,7 +238,10 @@ class DataService:
                         if db_source.provider.lower() in ['openbb', 'yfinance']:
                             data = openbb_service.get_stock_data(symbol, start_date, end_date)
                             if data is not None and not data.empty:
+                                logger.info(f"Successfully fetched data using {db_source.name} (provider: {db_source.provider})")
                                 return data
+                            else:
+                                logger.warning(f"Data source {db_source.name} returned empty data for {symbol}")
                         elif db_source.provider.lower() == 'alphavantage':
                             if alpha_vantage_service.is_available():
                                 data = alpha_vantage_service.get_stock_data(symbol, start_date, end_date)

@@ -33,26 +33,6 @@ const BacktestLab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showAIAnalysis, setShowAIAnalysis] = useState(false);
 
-  useEffect(() => {
-    loadStrategies();
-    // Set default dates (last 1 year)
-    const end = new Date();
-    const start = new Date();
-    start.setFullYear(start.getFullYear() - 1);
-    setEndDate(end.toISOString().split('T')[0]);
-    setStartDate(start.toISOString().split('T')[0]);
-
-    // Listen for strategy saved events to refresh the list
-    const handleStrategySaved = () => {
-      loadStrategies();
-    };
-    window.addEventListener('strategySaved', handleStrategySaved);
-
-    return () => {
-      window.removeEventListener('strategySaved', handleStrategySaved);
-    };
-  }, [loadStrategies]);
-
   /**
    * ✅ 优化：使用 useCallback 缓存函数，避免不必要的重新创建
    * 依赖项：showActiveOnly, selectedStrategy
@@ -73,7 +53,25 @@ const BacktestLab: React.FC = () => {
   }, [showActiveOnly, selectedStrategy]);
 
   useEffect(() => {
+    // Set default dates (last 1 year)
+    const end = new Date();
+    const start = new Date();
+    start.setFullYear(start.getFullYear() - 1);
+    setEndDate(end.toISOString().split('T')[0]);
+    setStartDate(start.toISOString().split('T')[0]);
+
+    // Load strategies on mount
     loadStrategies();
+
+    // Listen for strategy saved events to refresh the list
+    const handleStrategySaved = () => {
+      loadStrategies();
+    };
+    window.addEventListener('strategySaved', handleStrategySaved);
+
+    return () => {
+      window.removeEventListener('strategySaved', handleStrategySaved);
+    };
   }, [loadStrategies]);
 
   /**
