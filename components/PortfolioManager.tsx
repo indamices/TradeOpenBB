@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Wallet, Plus, Edit2, Trash2, TrendingUp, TrendingDown, 
-  DollarSign, Activity, AlertCircle, Save, X, Loader2 
+import {
+  Wallet, Plus, Edit2, Trash2, TrendingUp, TrendingDown,
+  DollarSign, Activity, AlertCircle, Save, X, Loader2
 } from 'lucide-react';
 import { Portfolio, Position, PositionCreate, PositionUpdate } from '../types';
 import { tradingService } from '../services/tradingService';
 import { ApiError } from '../services/apiClient';
+import { safeSignedPercent, safeCurrency, safeSignedCurrency } from '../utils/format';
 
 const PortfolioManager: React.FC = () => {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
@@ -169,7 +170,7 @@ const PortfolioManager: React.FC = () => {
           <div className="mt-4 flex items-center text-sm">
             <span className={`flex items-center ${portfolio.daily_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {portfolio.daily_pnl >= 0 ? <TrendingUp size={14} className="mr-1" /> : <TrendingDown size={14} className="mr-1" />}
-              {portfolio.daily_pnl_percent >= 0 ? '+' : ''}{(portfolio.daily_pnl_percent ?? 0).toFixed(2)}%
+              {safeSignedPercent(portfolio.daily_pnl_percent)}
             </span>
             <span className="text-slate-600 ml-2">今日</span>
           </div>
@@ -339,11 +340,11 @@ const PortfolioManager: React.FC = () => {
                 <tr key={pos.id} className="hover:bg-slate-800/30 transition-colors">
                   <td className="px-6 py-4 font-bold text-slate-200">{pos.symbol}</td>
                   <td className="px-6 py-4 text-slate-300">{pos.quantity}</td>
-                  <td className="px-6 py-4 text-slate-400">${pos.avg_price.toFixed(2)}</td>
-                  <td className="px-6 py-4 text-slate-300">${pos.current_price.toFixed(2)}</td>
-                  <td className="px-6 py-4 text-slate-200">${pos.market_value.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-slate-400">{safeCurrency(pos.avg_price)}</td>
+                  <td className="px-6 py-4 text-slate-300">{safeCurrency(pos.current_price)}</td>
+                  <td className="px-6 py-4 text-slate-200">{safeCurrency(pos.market_value)}</td>
                   <td className={`px-6 py-4 font-medium ${pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {pos.unrealized_pnl >= 0 ? '+' : ''}${pos.unrealized_pnl.toFixed(2)} ({pos.unrealized_pnl_percent >= 0 ? '+' : ''}{pos.unrealized_pnl_percent.toFixed(2)}%)
+                    {safeSignedCurrency(pos.unrealized_pnl)} ({safeSignedPercent(pos.unrealized_pnl_percent)})
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
